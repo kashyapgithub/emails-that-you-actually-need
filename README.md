@@ -1,68 +1,132 @@
-# Gmail Category Watcher
+<div align="center">
 
-A Chrome extension that watches your inbox and notifies you the moment an
-email matches a category you define — either by simple rules
-(sender/subject/keyword) or, if none of those catch it, an AI fallback that
-judges the email against a plain-English description you write.
+# 📬 Gmail Category Watcher
 
-No Google sign-in, no API keys to set up, no Google Cloud project. It reads
-your inbox the same way your eyes would — off the Gmail page itself.
+**Tell it what kind of email matters. It watches your inbox and pings you the moment one shows up.**
 
-## Setup (2 minutes)
+No OAuth. No Google Cloud project. No API dashboard tour. Load it and it works.
 
-1. Go to `chrome://extensions`
-2. Turn on **Developer mode** (top-right toggle)
-3. Click **Load unpacked** → select this `gmail-category-watcher` folder
-4. Click the extension's icon in the toolbar, add a rule or two, and flip
-   the toggle on
+![Manifest V3](https://img.shields.io/badge/manifest-v3-4285F4?logo=googlechrome&logoColor=white)
+![Zero OAuth](https://img.shields.io/badge/setup-zero%20OAuth-2e7d32)
+![AI Providers](https://img.shields.io/badge/AI-Claude%20%7C%20OpenAI%20%7C%20Gemini%20%7C%20OpenRouter-6f42c1)
+![License: MIT](https://img.shields.io/badge/license-MIT-yellow)
 
-That's it. If you don't already have a Gmail tab open, the extension opens
-a pinned one for you automatically.
+</div>
+
+---
+
+## The problem this solves
+
+Your inbox has exactly one email you actually need to see today, buried under
+forty you don't. Gmail's own filters only understand exact keywords. Zapier/
+Make.com want you to wire up a scenario and pay per run. The "proper" way —
+the Gmail API — wants an OAuth consent screen, a Google Cloud project, a
+verified app, and twenty minutes you don't have.
+
+This skips all of it. It reads your inbox the same way *you* do — off the
+rendered page — and decides what's worth a notification using either plain
+rules or an AI's judgment call.
 
 ## How it works
 
-- A small script runs only on `mail.google.com` and reads the inbox list
-  that's already rendered on the page — sender, subject, and preview text.
-  It never logs in, authenticates, or touches anything outside that one
-  page, and it only reads — it never clicks, deletes, or sends anything.
-- Every few minutes (configurable in the popup) it checks for new rows and
-  reports the ones it hasn't seen before.
-- Each new email is checked against your rules first (free, instant). Only
-  if nothing matches, and you've turned on AI fallback with an API key, does
-  it get sent — just the subject + preview, never the full body — to your
-  chosen provider for a fuzzy yes/no classification against the category
-  you described. Supported providers: **Anthropic (Claude)**, **OpenAI**,
-  **Google (Gemini)**, and **OpenRouter** (which can route to almost any
-  model — just use the provider-prefixed model name it expects, e.g.
-  `anthropic/claude-3.5-haiku` or `meta-llama/llama-3.1-8b-instruct`).
-- A match fires a native desktop notification; clicking it opens that
-  email in Gmail.
+```mermaid
+flowchart LR
+    A["📄 content.js<br/>reads the Gmail DOM"] -->|new rows| B["⚙️ background.js<br/>service worker"]
+    B --> C{Rule match?}
+    C -->|Yes| E["🔔 Notify"]
+    C -->|No, AI fallback on| D["🤖 AI classifier<br/>Claude · GPT · Gemini · OpenRouter"]
+    D -->|Match| E
+    D -->|No match| F["Ignore"]
+    E --> G["Chrome notification<br/>click → opens the email"]
+```
 
-## Things worth knowing
+Nothing here logs in, authenticates, or touches Gmail's servers directly —
+`content.js` only ever *reads* the page you're already signed into.
 
-- **Needs a Gmail tab open — doesn't need to be the focused one.** The
-  extension keeps a pinned background tab automatically; it doesn't have to
-  be the tab you're actively looking at.
-- **It only sees the current page of your inbox list.** Gmail renders
-  roughly 50 conversations per page (configurable in Gmail's own settings
-  up to 100) — the extension reads whatever's currently rendered, not your
-  whole mailbox. This is not a limitation in practice: new mail always
-  appears at the top of page one, so it's always visible to the next scan.
-- **It only reads the inbox view/tab that's currently open in that tab.**
-  If you use Gmail's Primary/Social/Promotions/Updates category tabs, only
-  the one currently on screen gets scanned. If you want full coverage,
-  turn off Categories in Gmail Settings → Inbox, so everything lives in one
-  unified list.
-- **The first scan after install/enable is a baseline, not a check.**
-  Whatever's already sitting in your inbox on that very first scan is
-  recorded as "already seen" without generating any notifications — so
-  turning this on doesn't dump every old matching email on you at once.
-  Detection starts fresh from the next scan onward.
-- **DOM-based, not API-based.** This trades the (real) hassle of Google
-  Cloud OAuth setup for a small risk: if Google redesigns the Gmail inbox
-  layout, the row-reading selectors in `content.js` may need a small
-  update. That logic lives in one function (`extractRow`) so it's a quick
-  fix if it ever happens.
-- Your AI API key (if you use the fallback) is stored only in
-  `chrome.storage.local` on your machine, and is only ever sent to the
-  provider you picked.
+## Features
+
+| | |
+|---|---|
+| 🚫 **Zero setup** | Load unpacked, done. No client IDs, no consent screens. |
+| 🎯 **Rule matching** | From / Subject / Body — contains, exact match, or sender domain |
+| 🤖 **AI fallback** | Fuzzy category matching in plain English, when keywords aren't enough |
+| 🔌 **4 AI providers** | Anthropic, OpenAI, Gemini, OpenRouter — bring your own key |
+| 🧠 **Smart baseline** | First scan never floods you with notifications for mail already sitting there |
+| 🪶 **Lightweight** | Polls a page, not an API. No servers, no infra, no bill until you opt into AI |
+| 🔒 **Reads only** | Never clicks, deletes, sends, or modifies anything |
+
+## Setup (2 minutes, seriously)
+
+1. `chrome://extensions` → toggle **Developer mode** (top-right)
+2. **Load unpacked** → select this folder
+3. Click the toolbar icon → add a rule → flip the toggle on
+
+If no Gmail tab is open, one gets pinned open for you automatically.
+
+## Building a rule
+
+The popup's Field and Match dropdowns are coupled — you can't build a
+combination that doesn't make sense (e.g. "Subject" + "domain" isn't offered,
+since a subject line doesn't have a domain).
+
+| Field | Match options | Example |
+|---|---|---|
+| **From** | contains · equals (exact address) · from domain | `zerodha.com` as a domain rule |
+| **Subject** | contains · equals | `"margin call"` |
+| **Body preview** | contains · equals | `"price alert"` |
+
+Any rule matching = instant notification, no AI call, no cost.
+
+## AI fallback — for the fuzzy stuff
+
+Rules can't catch "anything related to sales." For that, flip on AI fallback,
+describe the category in plain English, and pick a provider:
+
+| Provider | Example model string |
+|---|---|
+| **Anthropic** | `claude-sonnet-4-6` |
+| **OpenAI** | `gpt-4o-mini` |
+| **Google Gemini** | `gemini-2.0-flash` |
+| **OpenRouter** | `anthropic/claude-3.5-haiku`, `meta-llama/llama-3.1-8b-instruct`, … |
+
+It only ever sends the subject + preview snippet — never the full email body
+— and only for mail that *no rule already caught*, so you're not paying for
+AI calls on everything.
+
+## Good to know
+
+- **Needs a Gmail tab open**, not necessarily the focused one — a pinned
+  background tab works, and the extension opens one for you.
+- **Sees the current inbox page** (~50 conversations, Gmail's default) —
+  not your whole mailbox. New mail always lands at the top of page one, so
+  this is a non-issue in practice.
+- **Respects Gmail's category tabs.** If you use Primary/Social/Promotions,
+  only the tab currently open gets scanned. Turn off Categories in Gmail
+  settings for full single-list coverage.
+- **First scan is a baseline, not a check** — existing inbox mail never
+  triggers a notification flood on install.
+- **DOM-based by design.** If Google ever reshuffles Gmail's layout, the
+  only thing that might need a touch-up is `extractRow()` in `content.js` —
+  everything else is untouched.
+- Your AI key lives only in `chrome.storage.local`, sent only to the
+  provider you chose.
+
+## Project structure
+
+```
+gmail-category-watcher/
+├── manifest.json          # Manifest V3 config — permissions, content script registration
+├── content.js              # Runs on mail.google.com — reads the inbox DOM
+├── background.js           # Service worker — matching, AI fallback, notifications
+├── popup.html / .css / .js # The UI you actually click on
+├── lib/
+│   ├── ruleMatcher.js       # Pure rule-evaluation logic
+│   ├── aiClassifier.js      # Anthropic / OpenAI / Gemini / OpenRouter calls
+│   ├── notifier.js          # chrome.notifications wrapper
+│   └── storage.js           # Single source of truth for the storage schema
+└── icons/
+```
+
+## License
+
+MIT — do whatever you want with it.
