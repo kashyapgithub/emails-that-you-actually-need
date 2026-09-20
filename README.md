@@ -145,6 +145,44 @@ It only ever sends the subject + preview snippet — never the full email body
 — and only for mail that *no rule already caught*, so you're not paying for
 AI calls on everything.
 
+## 🔑 Your API key: where it's stored, and who can actually see it
+
+If you turn on AI fallback, you're handing this extension a real API key —
+that deserves a straight answer, not a throwaway line.
+
+**Where it lives:** `chrome.storage.local` — a small local database Chrome
+gives each extension, tied to this one browser profile on this one machine.
+
+**Who can read it:**
+- ✅ Only this extension's own code (`background.js` and the popup).
+  Chrome enforces hard isolation between extensions — no other extension,
+  and no website (including Gmail itself), can read another extension's
+  storage. `content.js`, the script that actually runs on the Gmail page,
+  **never touches the key at all** — it only ever sees email rows, never
+  your settings.
+- ❌ **Not synced anywhere.** This deliberately uses `chrome.storage.local`,
+  not `chrome.storage.sync` — so the key never leaves this machine via
+  Google's account sync, doesn't show up on your other devices, and isn't
+  sent to Google in any form.
+- ❌ **Not sent anywhere except the one place you told it to.** The only
+  network call it's ever part of is the direct HTTPS request to whichever
+  provider you picked (Anthropic, OpenAI, Google, xAI, or OpenRouter) —
+  see [`lib/aiClassifier.js`](lib/aiClassifier.js) if you want to verify
+  that yourself, line by line. No analytics, no third-party logging, no
+  telemetry back to this project.
+
+**The honest caveat:** `chrome.storage.local` is **not encrypted at rest**
+— this is true of most browser-extension local storage, not a shortcut
+specific to this project. Whoever has file-system-level access to your
+actual computer (or a shared login you don't fully control) could
+technically read the raw value, the same way they could read a
+browser-saved password or any other local app secret. It's safe from other
+extensions, other websites, and this project's own servers (there are
+none) — it isn't safe from someone who already has access to your machine.
+
+**If you uninstall the extension** (or clear its data from
+`chrome://extensions` → Details → "Clear data"), the key is gone with it.
+
 ## Good to know
 
 - **Gmail tab requirement** — see [Requirements](#requirements) above.
@@ -159,8 +197,7 @@ AI calls on everything.
 - **DOM-based by design.** If Google ever reshuffles Gmail's layout, the
   only thing that might need a touch-up is `extractRow()` in `content.js` —
   everything else is untouched.
-- Your AI key lives only in `chrome.storage.local`, sent only to the
-  provider you chose.
+- **API key storage/access** — see the dedicated section above.
 
 ## Project structure
 
