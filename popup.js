@@ -9,7 +9,7 @@
  */
 
 import { getSettings, saveSettings, getRules, saveRules, getMatchLog } from "./lib/storage.js";
-import { describeRule } from "./lib/ruleMatcher.js";
+import { describeRule, isValidRegex } from "./lib/ruleMatcher.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -36,15 +36,24 @@ const MATCH_OPTIONS_BY_FIELD = {
     ["contains", "contains"],
     ["equals", "equals (exact sender address)"],
     ["domain", "from domain"],
+    ["regex", "matches pattern (regex)"],
   ],
   subject: [
     ["contains", "contains"],
     ["equals", "equals (exact match)"],
+    ["regex", "matches pattern (regex)"],
   ],
   snippet: [
     ["contains", "contains"],
     ["equals", "equals (exact match)"],
+    ["regex", "matches pattern (regex)"],
   ],
+};
+
+const VALUE_PLACEHOLDER_BY_FIELD_AND_MATCH = {
+  "from:regex": "e.g. (zerodha|zerodh4|kite)\\.com",
+  "subject:regex": "e.g. margin\\s*call|forced\\s*liquidation",
+  "snippet:regex": "e.g. price\\s*alert",
 };
 
 const VALUE_PLACEHOLDER_BY_FIELD = {
@@ -73,7 +82,17 @@ function refreshMatchOptions() {
     matchSelect.value = previousValue;
   }
 
-  el("ruleValue").placeholder = VALUE_PLACEHOLDER_BY_FIELD[field] || "";
+  refreshValuePlaceholder();
+}
+
+function refreshValuePlaceholder() {
+  const field = el("ruleField").value;
+  const match = el("ruleMatch").value;
+  const regexKey = `${field}:regex`;
+  el("ruleValue").placeholder =
+    match === "regex"
+      ? VALUE_PLACEHOLDER_BY_FIELD_AND_MATCH[regexKey]
+      : VALUE_PLACEHOLDER_BY_FIELD[field] || "";
 }
 
 // Fields that are meaningless while AI fallback is switched off — greyed out
@@ -172,6 +191,7 @@ async function init() {
   refreshCheckNowAvailability(settings.isRunning);
 
   el("ruleField").addEventListener("change", refreshMatchOptions);
+  el("ruleMatch").addEventListener("change", refreshValuePlaceholder);
   el("aiEnabled").addEventListener("change", refreshAiFieldState);
 
   el("openGmailBtn").onclick = async () => {
@@ -187,9 +207,15 @@ async function init() {
 
   el("addRuleBtn").onclick = async () => {
     const value = el("ruleValue").value.trim();
+    el("ruleError").textContent = "";
     if (!value) return;
     const field = el("ruleField").value;
     const match = el("ruleMatch").value;
+
+    if (match === "regex" && !isValidRegex(value)) {
+      el("ruleError").textContent = "That's not a valid regular expression — check the brackets/escaping.";
+      return;
+    }
 
     const existingRules = await getRules();
     // Skip adding an identical rule twice (e.g. an accidental double-click) —

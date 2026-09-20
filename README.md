@@ -56,7 +56,7 @@ Nothing here logs in, authenticates, or touches Gmail's servers directly —
 | | |
 |---|---|
 | 🚫 **Zero setup** | Load unpacked, done. No client IDs, no consent screens. |
-| 🎯 **Rule matching** | From / Subject / Body — contains, exact match, or sender domain |
+| 🎯 **Rule matching** | From / Subject / Body — contains, exact match, sender domain, or regex |
 | 🤖 **AI fallback** | Fuzzy category matching in plain English, when keywords aren't enough |
 | 🔌 **4 AI providers** | Anthropic, OpenAI, Gemini, OpenRouter — bring your own key |
 | 🧠 **Smart baseline** | First scan never floods you with notifications for mail already sitting there |
@@ -95,11 +95,38 @@ since a subject line doesn't have a domain).
 
 | Field | Match options | Example |
 |---|---|---|
-| **From** | contains · equals (exact address) · from domain | `zerodha.com` as a domain rule |
-| **Subject** | contains · equals | `"margin call"` |
-| **Body preview** | contains · equals | `"price alert"` |
+| **From** | contains · equals (exact address) · from domain · **regex** | `zerodha.com` as a domain rule |
+| **Subject** | contains · equals · **regex** | `"margin call"` |
+| **Body preview** | contains · equals · **regex** | `"price alert"` |
 
 Any rule matching = instant notification, no AI call, no cost.
+
+### Regex matching — covering typos and shortcuts in one rule
+
+Every field also supports **regex** as a match type, for when a single fixed
+phrase isn't enough to reliably catch what you want. To be precise about
+what this does and doesn't do: **a regex pattern doesn't magically forgive
+arbitrary spelling mistakes** — it's not spell-check or fuzzy matching. What
+it *does* let you do is deliberately encode every spelling/shortcut you
+actually expect into one rule, instead of adding a separate "contains" rule
+for each variant:
+
+| What you want to catch | Pattern | Why |
+|---|---|---|
+| "margin call" *or* the shortcut "margin cal" | `margin\s*call?` | `l?` makes the last `l` optional, `\s*` allows any/no spacing |
+| A sender's domain misspelled as `zerodh4.com` or `zerodha.com` | `zerodh[a4]\.com` | `[a4]` matches either character in that position |
+| "invoice", "invoic", or "inv." | `inv(oice)?\.?` | Groups the optional ending, `?` makes it optional |
+| Either "receive" or the common misspelling "recieve" | `rec(ie\|ei)ve` | `\|` is regex "or" — lists every spelling you want covered |
+
+Matching is **case-insensitive by default** (`Margin Call` and `MARGIN CALL`
+both match `margin call`), same as the other match types. If you type an
+invalid pattern (unbalanced brackets, bad escaping), the popup tells you
+immediately and won't let you save it — a broken pattern silently matching
+nothing, with no indication why, would be worse than refusing to save it.
+
+If you genuinely need to catch typos you *can't* predict in advance, that's
+a fuzzy-matching problem (edit-distance based), not a regex one — the AI
+fallback below is the better tool for that kind of open-ended judgment call.
 
 ## AI fallback — for the fuzzy stuff
 
