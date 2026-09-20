@@ -62,6 +62,9 @@ Nothing here logs in, authenticates, or touches Gmail's servers directly —
 | 🧠 **Smart baseline** | First scan never floods you with notifications for mail already sitting there |
 | 🪶 **Lightweight** | Polls a page, not an API. No servers, no infra, no bill until you opt into AI |
 | 🔒 **Reads only** | Never clicks, deletes, sends, or modifies anything |
+| 🔍 **Preview before you save** | Test a draft rule against your real, current inbox with zero side effects |
+| 🔔 **Toolbar badge** | See match count at a glance — no need to open the popup |
+| 💾 **Export/import rules** | Rules live only on this machine (no cloud sync) — back them up or move them to another install as JSON |
 
 ## Requirements
 
@@ -128,6 +131,26 @@ If you genuinely need to catch typos you *can't* predict in advance, that's
 a fuzzy-matching problem (edit-distance based), not a regex one — the AI
 fallback below is the better tool for that kind of open-ended judgment call.
 
+### Testing a rule before you trust it
+
+Next to **Add rule** is a **Preview matches** button. It runs your draft
+rule — before it's even saved — against whatever's actually visible in your
+Gmail tab right now, and tells you how many of those emails it would have
+caught. This is checked entirely client-side and never marks anything as
+seen or fires a real notification, so it's safe to experiment with as many
+times as you want, especially useful for sanity-checking a regex pattern
+before committing to it.
+
+### Backing up your rules
+
+Rules live only in this one browser profile — there's no cloud sync (see
+[API key storage](#-your-api-key-where-its-stored-and-who-can-actually-see-it)
+for why local-only is the deliberate choice here too). **Export rules**
+downloads them as a plain JSON file; **Import rules** reads one back in,
+skipping anything already present or malformed rather than rejecting the
+whole file over one bad entry. Useful for backing up before an uninstall,
+or copying your setup to a second machine.
+
 ## AI fallback — for the fuzzy stuff
 
 Rules can't catch "anything related to sales." For that, flip on AI fallback,
@@ -186,6 +209,8 @@ none) — it isn't safe from someone who already has access to your machine.
 ## Good to know
 
 - **Gmail tab requirement** — see [Requirements](#requirements) above.
+- **The toolbar badge count resets when you open the popup** — opening it
+  *is* the acknowledgment, same as clearing a notifications tray.
 - **Sees the current inbox page** (~50 conversations, Gmail's default) —
   not your whole mailbox. New mail always lands at the top of page one, so
   this is a non-issue in practice.

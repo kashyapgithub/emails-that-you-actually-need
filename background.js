@@ -13,7 +13,7 @@
 
 import { findMatchingRule, describeRule } from "./lib/ruleMatcher.js";
 import { classifyEmail } from "./lib/aiClassifier.js";
-import { notifyMatch, registerNotificationClickHandler } from "./lib/notifier.js";
+import { notifyMatch, registerNotificationClickHandler, updateBadge } from "./lib/notifier.js";
 import {
   getSettings,
   saveSettings,
@@ -21,6 +21,7 @@ import {
   getProcessedIds,
   markProcessed,
   appendMatchLog,
+  incrementUnseenCount,
 } from "./lib/storage.js";
 
 const ENSURE_TAB_ALARM = "gcw-ensure-tab";
@@ -113,6 +114,12 @@ async function processScannedRowsInternal(rows) {
   }
 
   await markProcessed(unseen.map((r) => r.id));
+
+  if (matchedCount > 0) {
+    const total = await incrementUnseenCount(matchedCount);
+    await updateBadge(total);
+  }
+
   return { matched: matchedCount };
 }
 
@@ -179,6 +186,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else if (message.type === "GET_TAB_COUNT") {
       const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
       sendResponse({ tabCount: tabs.length });
+    } else if (message.type === "GET_CURRENT_INBOX_ROWS") {
+      // Used by the popup's "Preview matches" button — deliberately read-only:
+      // it fetches the currently visible rows WITHOUT marking them as seen or
+      // running them through processScannedRows, so testing a draft rule can
+      // never suppress a real future notification for that same email.
+      const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
+      const responses = await Promise.all(
+        tabs.map((tab) =>
+          chrome.tabs.sendMessage(tab.id, { type: "SCAN_NOW" }).catch(() => null)
+        )
+      );
+      const rows = responses.filter(Boolean).flatMap((r) => r.rows || []);
+      sendResponse({ rows, tabCount: tabs.length });
     }
   })();
   return true; // keep the message channel open for the async response

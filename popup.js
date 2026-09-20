@@ -8,8 +8,9 @@
  * chrome.runtime.sendMessage (for actions that need the service worker).
  */
 
-import { getSettings, saveSettings, getRules, saveRules, getMatchLog } from "./lib/storage.js";
-import { describeRule, isValidRegex } from "./lib/ruleMatcher.js";
+import { getSettings, saveSettings, getRules, saveRules, getMatchLog, clearMatchLog, resetUnseenCount } from "./lib/storage.js";
+import { describeRule, isValidRegex, ruleMatches } from "./lib/ruleMatcher.js";
+import { updateBadge } from "./lib/notifier.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -125,7 +126,7 @@ function renderRules(rules) {
   rules.forEach((rule) => {
     const row = document.createElement("div");
     row.className = "rule-item";
-    row.innerHTML = `<span>${describeRule(rule)}</span>`;
+    row.innerHTML = `<span>${escapeHtml(describeRule(rule))}</span>`;
     const removeBtn = document.createElement("button");
     removeBtn.textContent = "Remove";
     removeBtn.className = "secondary";
@@ -137,6 +138,20 @@ function renderRules(rules) {
     row.appendChild(removeBtn);
     container.appendChild(row);
   });
+}
+
+/**
+ * Escapes a string for safe insertion into innerHTML. MUST be used for any
+ * value that came from email content (subject, sender, snippet) — that
+ * text is written by whoever sent the email, not by you, so it's untrusted
+ * input the same way a comment on a public form would be. Without this,
+ * a crafted subject line could inject markup into this extension's own
+ * popup page.
+ */
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
 }
 
 function renderMatchLog(log) {
@@ -151,9 +166,9 @@ function renderMatchLog(log) {
     div.className = "match-item";
     const time = new Date(entry.timestamp).toLocaleString();
     div.innerHTML = `
-      <div class="subject">${entry.subject || "(no subject)"}</div>
-      <div class="meta">${entry.from} · ${entry.matchedBy}</div>
-      <div class="meta">${time}</div>
+      <div class="subject">${escapeHtml(entry.subject) || "(no subject)"}</div>
+      <div class="meta">${escapeHtml(entry.from)} · ${escapeHtml(entry.matchedBy)}</div>
+      <div class="meta">${escapeHtml(time)}</div>
     `;
     container.appendChild(div);
   });
@@ -190,6 +205,11 @@ async function init() {
   refreshMatchOptions(); // populate Match dropdown correctly for the default Field on load
   refreshAiFieldState();
   refreshCheckNowAvailability(settings.isRunning);
+
+  // Opening the popup IS the acknowledgment — clear the "you have unseen
+  // matches" badge the same way opening a notifications tray would.
+  await resetUnseenCount();
+  await updateBadge(0);
 
   el("ruleField").addEventListener("change", refreshMatchOptions);
   el("ruleMatch").addEventListener("change", refreshValuePlaceholder);
@@ -234,6 +254,129 @@ async function init() {
     await saveRules(updated);
     renderRules(updated);
     el("ruleValue").value = "";
+  };
+
+  // Tests a DRAFT rule (not yet saved) against whatever's actually visible
+  // in your Gmail tab right now — so you can confirm a regex or keyword
+  // actually catches what you think it does before committing to it,
+  // instead of waiting for real mail to arrive to find out it doesn't.
+  // Deliberately read-only: it never marks anything as seen or fires a
+  // real notification (see GET_CURRENT_INBOX_ROWS in background.js).
+  el("previewRuleBtn").onclick = async () => {
+    const value = el("ruleValue").value.trim();
+    const errorEl = el("ruleError");
+    errorEl.style.color = "";
+    errorEl.textContent = "";
+
+    if (!value) {
+      errorEl.textContent = "Enter a value first.";
+      return;
+    }
+    const field = el("ruleField").value;
+    const match = el("ruleMatch").value;
+    if (match === "regex" && !isValidRegex(value)) {
+      errorEl.textContent = "That's not a valid regular expression — check the brackets/escaping.";
+      return;
+    }
+
+    el("previewRuleBtn").disabled = true;
+    el("previewRuleBtn").textContent = "Checking…";
+    const { rows, tabCount } = await chrome.runtime.sendMessage({ type: "GET_CURRENT_INBOX_ROWS" });
+    el("previewRuleBtn").disabled = false;
+    el("previewRuleBtn").textContent = "Preview matches";
+
+    if (tabCount === 0) {
+      errorEl.textContent = "No Gmail tab open to preview against — open one first.";
+      return;
+    }
+
+    const draftRule = { field, match, value, caseSensitive: false };
+    const matchCount = rows.filter((row) => ruleMatches(draftRule, row)).length;
+    errorEl.style.color = matchCount > 0 ? "#2e7d32" : "#5f6368";
+    errorEl.textContent =
+      matchCount > 0
+        ? `✓ Would match ${matchCount} of ${rows.length} currently visible emails.`
+        : `No matches among the ${rows.length} currently visible emails — check your pattern.`;
+  };
+
+  // Rules only ever live in this one browser's local storage — no sync
+  // across machines, and they're gone if you ever uninstall. Export/import
+  // is the manual backup/transfer mechanism for that gap.
+  el("exportRulesBtn").onclick = async () => {
+    const rules = await getRules();
+    const blob = new Blob([JSON.stringify(rules, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gmail-category-watcher-rules.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  el("importRulesBtn").onclick = () => el("importRulesFile").click();
+
+  el("importRulesFile").onchange = async (e) => {
+    const file = e.target.files[0];
+    const errorEl = el("ruleError");
+    errorEl.style.color = "";
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const imported = JSON.parse(text);
+      if (!Array.isArray(imported)) throw new Error("not an array");
+
+      const existingRules = await getRules();
+      const merged = [...existingRules];
+      let added = 0;
+
+      for (const candidate of imported) {
+        // Validate each entry independently — one malformed rule in an
+        // imported file shouldn't reject the whole import, just get skipped.
+        if (
+          !candidate ||
+          typeof candidate.field !== "string" ||
+          typeof candidate.match !== "string" ||
+          typeof candidate.value !== "string"
+        ) {
+          continue;
+        }
+        if (candidate.match === "regex" && !isValidRegex(candidate.value)) continue;
+
+        const isDuplicate = merged.some(
+          (r) =>
+            r.field === candidate.field &&
+            r.match === candidate.match &&
+            r.value.toLowerCase() === candidate.value.toLowerCase()
+        );
+        if (isDuplicate) continue;
+
+        merged.push({
+          id: uid(),
+          field: candidate.field,
+          match: candidate.match,
+          value: candidate.value,
+          caseSensitive: !!candidate.caseSensitive,
+        });
+        added++;
+      }
+
+      await saveRules(merged);
+      renderRules(merged);
+      errorEl.style.color = added > 0 ? "#2e7d32" : "#5f6368";
+      errorEl.textContent =
+        added > 0 ? `✓ Imported ${added} new rule${added > 1 ? "s" : ""}.` : "No new rules found in that file.";
+    } catch {
+      errorEl.style.color = "";
+      errorEl.textContent = "Couldn't read that file — make sure it's a JSON export from this extension.";
+    } finally {
+      e.target.value = ""; // allow re-importing the same file later
+    }
+  };
+
+  el("clearLogBtn").onclick = async () => {
+    await clearMatchLog();
+    renderMatchLog([]);
   };
 
   // Save-on-change for every AI/settings field, so nothing needs an explicit "Save" button.

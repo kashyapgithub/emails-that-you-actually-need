@@ -31,7 +31,13 @@
       <select id="ruleMatch"></select>
       <input type="text" id="ruleValue" placeholder="e.g. brokername.com" />
       <button id="addRuleBtn">Add rule</button>
+      <button id="previewRuleBtn" class="secondary">Preview matches</button>
       <p id="ruleError" class="rule-error"></p>
+    </div>
+    <div class="rule-io">
+      <button id="exportRulesBtn" class="secondary">Export rules</button>
+      <button id="importRulesBtn" class="secondary">Import rules</button>
+      <input type="file" id="importRulesFile" accept="application/json" style="display:none" />
     </div>
   </section>
 
@@ -70,6 +76,7 @@
   <section class="card">
     <h2>Recent matches</h2>
     <div id="matchLog"><p class="hint">No matches yet.</p></div>
+    <button id="clearLogBtn" class="secondary">Clear log</button>
   </section>
 
   <script src="popup.js" type="module"></script>
