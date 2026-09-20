@@ -25,6 +25,7 @@ const DEFAULT_MODEL_BY_PROVIDER = {
   openai: "gpt-4o-mini",
   gemini: "gemini-2.0-flash",
   openrouter: "openai/gpt-4o-mini",
+  xai: "grok-4",
 };
 
 // The available "Match" options depend entirely on which Field is selected —

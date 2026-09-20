@@ -8,7 +8,7 @@ No OAuth. No Google Cloud project. No API dashboard tour. Load it and it works.
 
 ![Manifest V3](https://img.shields.io/badge/manifest-v3-4285F4?logo=googlechrome&logoColor=white)
 ![Zero OAuth](https://img.shields.io/badge/setup-zero%20OAuth-2e7d32)
-![AI Providers](https://img.shields.io/badge/AI-Claude%20%7C%20OpenAI%20%7C%20Gemini%20%7C%20OpenRouter-6f42c1)
+![AI Providers](https://img.shields.io/badge/AI-Claude%20%7C%20OpenAI%20%7C%20Gemini%20%7C%20Grok%20%7C%20OpenRouter-6f42c1)
 ![License: MIT](https://img.shields.io/badge/license-MIT-yellow)
 
 </div>
@@ -42,7 +42,7 @@ flowchart LR
     A["📄 content.js<br/>reads the Gmail DOM"] -->|new rows| B["⚙️ background.js<br/>service worker"]
     B --> C{Rule match?}
     C -->|Yes| E["🔔 Notify"]
-    C -->|No, AI fallback on| D["🤖 AI classifier<br/>Claude · GPT · Gemini · OpenRouter"]
+    C -->|No, AI fallback on| D["🤖 AI classifier<br/>Claude · GPT · Gemini · Grok · OpenRouter"]
     D -->|Match| E
     D -->|No match| F["Ignore"]
     E --> G["Chrome notification<br/>click → opens the email"]
@@ -58,7 +58,7 @@ Nothing here logs in, authenticates, or touches Gmail's servers directly —
 | 🚫 **Zero setup** | Load unpacked, done. No client IDs, no consent screens. |
 | 🎯 **Rule matching** | From / Subject / Body — contains, exact match, sender domain, or regex |
 | 🤖 **AI fallback** | Fuzzy category matching in plain English, when keywords aren't enough |
-| 🔌 **4 AI providers** | Anthropic, OpenAI, Gemini, OpenRouter — bring your own key |
+| 🔌 **5 AI providers** | Anthropic, OpenAI, Gemini, xAI, OpenRouter — bring your own key |
 | 🧠 **Smart baseline** | First scan never floods you with notifications for mail already sitting there |
 | 🪶 **Lightweight** | Polls a page, not an API. No servers, no infra, no bill until you opt into AI |
 | 🔒 **Reads only** | Never clicks, deletes, sends, or modifies anything |
@@ -138,6 +138,7 @@ describe the category in plain English, and pick a provider:
 | **Anthropic** | `claude-sonnet-4-6` |
 | **OpenAI** | `gpt-4o-mini` |
 | **Google Gemini** | `gemini-2.0-flash` |
+| **xAI (Grok)** | `grok-4` |
 | **OpenRouter** | `anthropic/claude-3.5-haiku`, `meta-llama/llama-3.1-8b-instruct`, … |
 
 It only ever sends the subject + preview snippet — never the full email body
