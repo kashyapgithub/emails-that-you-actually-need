@@ -179,4 +179,4 @@ gmail-category-watcher/
 
 ## License
 
-MIT — do whatever you want with it.
+This project is licensed under the [MIT License](LICENSE).
