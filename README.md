@@ -15,6 +15,14 @@ No OAuth. No Google Cloud project. No API dashboard tour. Load it and it works.
 
 ---
 
+> [!IMPORTANT]
+> **Requires one Gmail tab to be open** (it doesn't need to be the active/
+> focused tab — a pinned background tab is fine). This extension has no
+> access to Gmail's servers; it reads the inbox off the page itself, so if
+> every Gmail tab is closed, there's nothing for it to read and watching
+> pauses until one is open again. If none is open when you flip watching
+> on, it opens a pinned one for you automatically — see [Requirements](#requirements).
+
 ## The problem this solves
 
 Your inbox has exactly one email you actually need to see today, buried under
@@ -55,13 +63,29 @@ Nothing here logs in, authenticates, or touches Gmail's servers directly —
 | 🪶 **Lightweight** | Polls a page, not an API. No servers, no infra, no bill until you opt into AI |
 | 🔒 **Reads only** | Never clicks, deletes, sends, or modifies anything |
 
+## Requirements
+
+- **Google Chrome** (or any Chromium browser that supports Manifest V3 —
+  Edge, Brave, etc.)
+- **One Gmail tab open, at all times, while watching is on.** This is the
+  trade-off for skipping OAuth entirely: there's no server-side connection
+  to your inbox, so the extension can only see mail when a Gmail tab exists
+  for it to read from. Practically, this is a non-issue —
+  - it auto-opens a **pinned** tab for you if none exists when you turn
+    watching on
+  - that tab does **not** need focus — it can sit pinned in the background
+    while you work in other tabs
+  - if you close *every* Gmail tab, watching simply pauses (no crash, no
+    error) until one exists again — reopening one, or clicking **Check
+    now** in the popup, picks detection back up immediately
+
 ## Setup (2 minutes, seriously)
 
 1. `chrome://extensions` → toggle **Developer mode** (top-right)
 2. **Load unpacked** → select this folder
 3. Click the toolbar icon → add a rule → flip the toggle on
 
-If no Gmail tab is open, one gets pinned open for you automatically.
+See [Requirements](#requirements) for the one thing this needs to keep running.
 
 ## Building a rule
 
@@ -95,8 +119,7 @@ AI calls on everything.
 
 ## Good to know
 
-- **Needs a Gmail tab open**, not necessarily the focused one — a pinned
-  background tab works, and the extension opens one for you.
+- **Gmail tab requirement** — see [Requirements](#requirements) above.
 - **Sees the current inbox page** (~50 conversations, Gmail's default) —
   not your whole mailbox. New mail always lands at the top of page one, so
   this is a non-issue in practice.
