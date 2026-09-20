@@ -9,11 +9,13 @@
  * It only ever READS the page. It never clicks, deletes, or sends anything.
  *
  * Responsibilities:
- *   1. Scan the inbox list for rows on an interval (+ a MutationObserver
- *      for near-instant pickup when Gmail injects new mail live).
- *   2. Turn each row into a plain {from, subject, snippet} object.
- *   3. Send only the NEW ones (by fingerprint) to background.js, which
- *      does the actual rule/AI matching and fires the notification.
+ *   1. Scan the inbox list on an interval, ONLY while watching is turned on.
+ *   2. Also catch new mail arriving live via a MutationObserver — debounced,
+ *      so Gmail's constant background DOM churn (read receipts, hover
+ *      states, unread counters) doesn't trigger dozens of rescans a minute.
+ *   3. Turn each row into a plain {from, subject, snippet} object and send
+ *      only the current set to background.js, which does the actual
+ *      dedupe + rule/AI matching + notification.
  *
  * Note on selectors: Gmail's inbox row class (`tr.zA`) and its subject/
  * snippet/sender classes (`.bog`, `.y2`, `span[email]`) have been stable
@@ -23,7 +25,10 @@
  */
 
 const DEFAULT_INTERVAL_MINUTES = 3;
+const MUTATION_DEBOUNCE_MS = 2000; // coalesce bursts of Gmail's own DOM churn into one scan
+
 let scanTimer = null;
+let isRunning = false; // mirrors settings.isRunning — the master on/off switch
 
 /** Small, fast, non-cryptographic hash — just enough to dedupe rows. */
 function fingerprint(str) {
@@ -32,6 +37,15 @@ function fingerprint(str) {
     hash = (hash * 33) ^ str.charCodeAt(i);
   }
   return (hash >>> 0).toString(36);
+}
+
+/** Generic debounce: collapses rapid repeated calls into one, after `wait` ms of quiet. */
+function debounce(fn, wait) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
 }
 
 /** Pulls {from, subject, snippet, gmailLink} out of one inbox row, or null if the row doesn't look like a normal message row. */
@@ -57,10 +71,9 @@ function extractRow(row) {
   }
 }
 
-function scanInbox() {
+/** Pure DOM read: returns the current inbox rows as plain objects. No messaging, no side effects. */
+function collectRows() {
   const rows = document.querySelectorAll("tr.zA");
-  if (rows.length === 0) return; // inbox list not rendered yet (e.g. viewing a single thread)
-
   const found = [];
   rows.forEach((row) => {
     const email = extractRow(row);
@@ -68,7 +81,12 @@ function scanInbox() {
     const id = fingerprint(`${email.from}|${email.subject}|${email.snippet.slice(0, 40)}`);
     found.push({ id, ...email });
   });
+  return found;
+}
 
+function scanInbox() {
+  if (!isRunning) return; // master switch is off — do nothing, not even a DOM query
+  const found = collectRows();
   if (found.length > 0) {
     chrome.runtime.sendMessage({ type: "GMAIL_ROWS", rows: found }).catch(() => {
       // Background worker may be asleep/waking up — safe to ignore, next scan will retry.
@@ -76,28 +94,49 @@ function scanInbox() {
   }
 }
 
-function startScanning(intervalMinutes) {
-  if (scanTimer) clearInterval(scanTimer);
-  scanTimer = setInterval(scanInbox, Math.max(1, intervalMinutes) * 60 * 1000);
-  scanInbox(); // run once immediately on load
+const debouncedScan = debounce(scanInbox, MUTATION_DEBOUNCE_MS);
+
+function stopScanning() {
+  if (scanTimer) {
+    clearInterval(scanTimer);
+    scanTimer = null;
+  }
 }
 
-// Pick up the configured interval, and react if it's changed from the popup.
-chrome.storage.local.get("settings", ({ settings }) => {
-  startScanning(settings?.pollIntervalMinutes || DEFAULT_INTERVAL_MINUTES);
-});
+function startScanning(intervalMinutes) {
+  stopScanning();
+  scanTimer = setInterval(scanInbox, Math.max(1, intervalMinutes) * 60 * 1000);
+  scanInbox(); // run once immediately
+}
+
+/** Applies the current settings: starts/stops the timer and updates the isRunning flag used everywhere above. */
+function applySettings(settings) {
+  isRunning = !!settings?.isRunning;
+  if (isRunning) {
+    startScanning(settings?.pollIntervalMinutes || DEFAULT_INTERVAL_MINUTES);
+  } else {
+    stopScanning(); // no point polling a DOM we're not allowed to act on
+  }
+}
+
+chrome.storage.local.get("settings", ({ settings }) => applySettings(settings));
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.settings?.newValue?.pollIntervalMinutes) {
-    startScanning(changes.settings.newValue.pollIntervalMinutes);
-  }
+  if (changes.settings) applySettings(changes.settings.newValue);
 });
 
-// Fast-path: catch new mail arriving live, without waiting for the next timer tick.
-const observer = new MutationObserver(() => scanInbox());
+// Fast-path: catch new mail arriving live, without waiting for the next timer
+// tick — debounced so Gmail's own constant DOM churn doesn't cause a rescan
+// storm (this was previously unthrottled and was the single biggest resource
+// and correctness problem in this file).
+const observer = new MutationObserver(() => debouncedScan());
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Lets the popup's "Check now" button force an immediate scan on this tab.
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === "SCAN_NOW") scanInbox();
+// Lets the popup's "Check now" button force an immediate scan on this tab and
+// get the result back directly, so the popup can show a result that reflects
+// what actually happened rather than guessing with a timer.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "SCAN_NOW") {
+    sendResponse({ rows: collectRows() });
+  }
 });

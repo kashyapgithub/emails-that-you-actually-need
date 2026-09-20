@@ -9,6 +9,7 @@
  */
 
 import { getSettings, saveSettings, getRules, saveRules, getMatchLog } from "./lib/storage.js";
+import { describeRule } from "./lib/ruleMatcher.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -75,6 +76,25 @@ function refreshMatchOptions() {
   el("ruleValue").placeholder = VALUE_PLACEHOLDER_BY_FIELD[field] || "";
 }
 
+// Fields that are meaningless while AI fallback is switched off — greyed out
+// so it's visually obvious they're inactive, instead of letting someone fill
+// in an API key and description that quietly do nothing until they notice
+// the checkbox above them.
+const AI_DEPENDENT_FIELD_IDS = ["categoryDescription", "aiProvider", "aiModel", "aiApiKey"];
+
+function refreshAiFieldState() {
+  const enabled = el("aiEnabled").checked;
+  AI_DEPENDENT_FIELD_IDS.forEach((id) => {
+    el(id).disabled = !enabled;
+  });
+}
+
+function refreshCheckNowAvailability(isRunning) {
+  const btn = el("checkNowBtn");
+  btn.disabled = !isRunning;
+  btn.title = isRunning ? "" : "Turn on watching (top-right toggle) first";
+}
+
 function renderRules(rules) {
   const container = el("ruleList");
   container.innerHTML = "";
@@ -85,11 +105,7 @@ function renderRules(rules) {
   rules.forEach((rule) => {
     const row = document.createElement("div");
     row.className = "rule-item";
-    const label =
-      rule.match === "domain"
-        ? `From domain = ${rule.value}`
-        : `${rule.field} ${rule.match} "${rule.value}"`;
-    row.innerHTML = `<span>${label}</span>`;
+    row.innerHTML = `<span>${describeRule(rule)}</span>`;
     const removeBtn = document.createElement("button");
     removeBtn.textContent = "Remove";
     removeBtn.className = "secondary";
@@ -152,8 +168,11 @@ async function init() {
   renderMatchLog(log);
   refreshTabStatus();
   refreshMatchOptions(); // populate Match dropdown correctly for the default Field on load
+  refreshAiFieldState();
+  refreshCheckNowAvailability(settings.isRunning);
 
   el("ruleField").addEventListener("change", refreshMatchOptions);
+  el("aiEnabled").addEventListener("change", refreshAiFieldState);
 
   el("openGmailBtn").onclick = async () => {
     await chrome.tabs.create({ url: "https://mail.google.com/mail/u/0/#inbox", pinned: true, active: true });
@@ -162,20 +181,29 @@ async function init() {
 
   el("runningToggle").onchange = async (e) => {
     await chrome.runtime.sendMessage({ type: "SET_RUNNING", value: e.target.checked });
+    refreshCheckNowAvailability(e.target.checked);
     setTimeout(refreshTabStatus, 1500);
   };
 
   el("addRuleBtn").onclick = async () => {
     const value = el("ruleValue").value.trim();
     if (!value) return;
-    const newRule = {
-      id: uid(),
-      field: el("ruleField").value,
-      match: el("ruleMatch").value,
-      value,
-      caseSensitive: false,
-    };
-    const updated = [...(await getRules()), newRule];
+    const field = el("ruleField").value;
+    const match = el("ruleMatch").value;
+
+    const existingRules = await getRules();
+    // Skip adding an identical rule twice (e.g. an accidental double-click) —
+    // it would work fine but just clutters the list with a duplicate.
+    const alreadyExists = existingRules.some(
+      (r) => r.field === field && r.match === match && r.value.toLowerCase() === value.toLowerCase()
+    );
+    if (alreadyExists) {
+      el("ruleValue").value = "";
+      return;
+    }
+
+    const newRule = { id: uid(), field, match, value, caseSensitive: false };
+    const updated = [...existingRules, newRule];
     await saveRules(updated);
     renderRules(updated);
     el("ruleValue").value = "";
@@ -210,13 +238,25 @@ async function init() {
   });
 
   el("checkNowBtn").onclick = async () => {
+    el("checkNowBtn").disabled = true;
     el("checkNowBtn").textContent = "Checking…";
-    await chrome.runtime.sendMessage({ type: "CHECK_NOW" });
-    setTimeout(async () => {
-      el("checkNowBtn").textContent = "Check now";
-      renderMatchLog(await getMatchLog());
-      refreshTabStatus();
-    }, 1000);
+
+    // This now genuinely waits for the full pass — scan, rule matching, and
+    // any AI fallback calls — to finish in the background worker, instead
+    // of guessing with a fixed timeout that could resolve before the real
+    // work (especially a network round-trip to an AI provider) was done.
+    const result = await chrome.runtime.sendMessage({ type: "CHECK_NOW" });
+
+    el("checkNowBtn").textContent = "Check now";
+    el("checkNowBtn").disabled = false;
+
+    if (result?.ok === false && result.reason === "not_running") {
+      el("checkNowBtn").disabled = true; // stays disabled until watching is turned back on
+      return;
+    }
+
+    renderMatchLog(await getMatchLog());
+    refreshTabStatus();
   };
 }
 
