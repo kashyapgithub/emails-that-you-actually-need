@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail Category Watcher",
+  "version": "2.0.0",
+  "description": "Watches your open Gmail tab and notifies you the moment an email matches a category you define \u2014 no sign-in, no setup, just load and go.",
+
+  "permissions": ["storage", "notifications", "tabs", "alarms"],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://openrouter.ai/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

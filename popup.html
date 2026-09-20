@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gmail Category Watcher</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>Gmail Category Watcher</h1>
+    <label class="switch">
+      <input type="checkbox" id="runningToggle" />
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <section class="card">
+    <p id="tabStatus">Checking for an open Gmail tab…</p>
+    <button id="openGmailBtn">Open Gmail tab</button>
+  </section>
+
+  <section class="card">
+    <h2>Rules <span class="hint">(any match triggers a notification)</span></h2>
+    <div id="ruleList"></div>
+    <div class="rule-form">
+      <select id="ruleField">
+        <option value="from">From</option>
+        <option value="subject">Subject</option>
+        <option value="snippet">Body preview</option>
+      </select>
+      <select id="ruleMatch"></select>
+      <input type="text" id="ruleValue" placeholder="e.g. brokername.com" />
+      <button id="addRuleBtn">Add rule</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>AI fallback <span class="hint">(used only when no rule matches)</span></h2>
+    <label class="checkbox-row">
+      <input type="checkbox" id="aiEnabled" />
+      Enable AI fallback matching
+    </label>
+    <textarea id="categoryDescription" placeholder="Describe the category in plain English, e.g. 'emails about a margin call or forced position liquidation'"></textarea>
+    <div class="ai-config">
+      <select id="aiProvider">
+        <option value="anthropic">Anthropic (Claude)</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Google (Gemini)</option>
+        <option value="openrouter">OpenRouter</option>
+      </select>
+      <input type="text" id="aiModel" placeholder="model name" />
+    </div>
+    <input type="password" id="aiApiKey" placeholder="Your API key (stored locally only)" />
+  </section>
+
+  <section class="card">
+    <h2>Poll interval</h2>
+    <select id="pollInterval">
+      <option value="1">Every 1 minute</option>
+      <option value="3">Every 3 minutes</option>
+      <option value="5">Every 5 minutes</option>
+      <option value="10">Every 10 minutes</option>
+      <option value="15">Every 15 minutes</option>
+    </select>
+    <button id="checkNowBtn">Check now</button>
+  </section>
+
+  <section class="card">
+    <h2>Recent matches</h2>
+    <div id="matchLog"><p class="hint">No matches yet.</p></div>
+  </section>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

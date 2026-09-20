@@ -1,0 +1,89 @@
+* { box-sizing: border-box; }
+
+body {
+  width: 340px;
+  margin: 0;
+  padding: 12px;
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 13px;
+  color: #202124;
+  background: #fafafa;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+h1 { font-size: 15px; margin: 0; }
+h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.03em; color: #5f6368; }
+.hint { font-weight: normal; text-transform: none; color: #9aa0a6; font-size: 11px; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+button {
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+button:hover { background: #b71c1c; }
+button.secondary { background: #757575; }
+
+input[type="text"], input[type="password"], select, textarea {
+  width: 100%;
+  padding: 6px;
+  margin-top: 6px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+}
+textarea { min-height: 50px; resize: vertical; }
+
+.rule-form { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.rule-form select { width: auto; flex: 1; margin-top: 0; }
+.rule-form input { flex: 2; margin-top: 0; }
+.rule-form button { flex-basis: 100%; margin-top: 6px; }
+
+.rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 12px;
+}
+.rule-item button { padding: 2px 6px; font-size: 11px; }
+
+.checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.ai-config { display: flex; gap: 4px; margin-top: 6px; }
+
+.match-item { padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+.match-item .subject { font-weight: 600; }
+.match-item .meta { color: #9aa0a6; font-size: 11px; }
+
+/* Toggle switch */
+.switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background-color: #ccc; border-radius: 20px; transition: 0.2s;
+}
+.slider::before {
+  content: ""; position: absolute; height: 14px; width: 14px;
+  left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: 0.2s;
+}
+input:checked + .slider { background-color: #2e7d32; }
+input:checked + .slider::before { transform: translateX(16px); }
