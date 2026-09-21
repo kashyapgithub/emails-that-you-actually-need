@@ -22,12 +22,62 @@ import {
   markProcessed,
   appendMatchLog,
   incrementUnseenCount,
+  addRuleIfNew,
 } from "./lib/storage.js";
+
+const CONTEXT_MENU_ID = "gcw-add-sender-rule";
 
 const ENSURE_TAB_ALARM = "gcw-ensure-tab";
 const GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox";
 
 registerNotificationClickHandler();
+
+/**
+ * Right-click "add rule" straight from Gmail: select a sender's name or
+ * address in any inbox row, right-click, one click adds a rule — no popup,
+ * no dropdowns, no typing. This is the single biggest interaction-speed
+ * win available here, since it turns the most common action (watch this
+ * sender) from ~5 steps in the popup into 2 clicks in the page you're
+ * already looking at.
+ */
+function setUpContextMenu() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: CONTEXT_MENU_ID,
+      title: 'Add "%s" as a watch rule',
+      contexts: ["selection"],
+      documentUrlPatterns: ["https://mail.google.com/*"],
+    });
+  });
+}
+
+chrome.contextMenus.onClicked.addListener(async (info) => {
+  if (info.menuItemId !== CONTEXT_MENU_ID) return;
+  const text = (info.selectionText || "").trim();
+  if (!text) return;
+
+  // If the selection looks like an email address, prefer a domain rule
+  // (catches every sender at that company, which is what "watch this
+  // sender" usually means for a broker/bank alert address). Otherwise
+  // fall back to matching the selected text against the From field
+  // (useful for selecting just a display name like "Zerodha Kite").
+  const emailMatch = text.match(/[\w.+-]+@([\w-]+\.[\w.-]+)/);
+  const rule = emailMatch
+    ? { field: "from", match: "domain", value: emailMatch[1].toLowerCase(), caseSensitive: false }
+    : { field: "from", match: "contains", value: text, caseSensitive: false };
+
+  const { added } = await addRuleIfNew(rule);
+
+  // A quick, self-dismissing confirmation — distinct notification ID prefix
+  // from real matches (`gcw-<id>`) so it can never collide with one.
+  chrome.notifications.create(`gcw-confirm-${Date.now()}`, {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title: added ? "Rule added" : "Already watching this",
+    message: describeRule(rule),
+    priority: 0,
+  });
+});
 
 /** Opens a pinned, non-focused Gmail tab if the user doesn't already have one open. */
 async function ensureGmailTabOpen() {
@@ -211,5 +261,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // keep the message channel open for the async response
 });
 
-chrome.runtime.onInstalled.addListener(syncAlarm);
-chrome.runtime.onStartup.addListener(syncAlarm);
+chrome.runtime.onInstalled.addListener(() => {
+  syncAlarm();
+  setUpContextMenu();
+});
+chrome.runtime.onStartup.addListener(() => {
+  syncAlarm();
+  setUpContextMenu();
+});

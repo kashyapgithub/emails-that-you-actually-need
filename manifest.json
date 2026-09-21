@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "description": "Watches your open Gmail tab and notifies you the moment an email matches a category you define \u2014 no sign-in, no setup, just load and go.",
 
-  "permissions": ["storage", "notifications", "tabs", "alarms"],
+  "permissions": ["storage", "notifications", "tabs", "alarms", "contextMenus"],
   "host_permissions": [
     "https://mail.google.com/*",
     "https://api.anthropic.com/*",

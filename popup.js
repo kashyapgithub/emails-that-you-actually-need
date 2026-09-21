@@ -8,8 +8,17 @@
  * chrome.runtime.sendMessage (for actions that need the service worker).
  */
 
-import { getSettings, saveSettings, getRules, saveRules, getMatchLog, clearMatchLog, resetUnseenCount } from "./lib/storage.js";
-import { describeRule, isValidRegex, ruleMatches, caseSensitivityApplies } from "./lib/ruleMatcher.js";
+import {
+  getSettings,
+  saveSettings,
+  getRules,
+  saveRules,
+  addRuleIfNew,
+  getMatchLog,
+  clearMatchLog,
+  resetUnseenCount,
+} from "./lib/storage.js";
+import { describeRule, isValidRegex, ruleMatches, caseSensitivityApplies, extractDomain } from "./lib/ruleMatcher.js";
 import { updateBadge } from "./lib/notifier.js";
 
 const el = (id) => document.getElementById(id);
@@ -64,6 +73,17 @@ const VALUE_PLACEHOLDER_BY_FIELD = {
   snippet: "e.g. price alert",
 };
 
+// One-click starting points for common categories, so someone who doesn't
+// want to think about regex syntax from scratch can click a chip, glance
+// at the auto-filled pattern, and hit Add — rather than starting from a
+// blank field every time.
+const RULE_PRESETS = [
+  { label: "OTP / verification code", field: "subject", match: "regex", value: "\\bOTP\\b|one.?time.?password|verification code" },
+  { label: "Invoice / receipt", field: "subject", match: "regex", value: "invoice|receipt|payment (received|due)" },
+  { label: "Trading / broker alert", field: "subject", match: "regex", value: "margin call|trade confirmation|order (placed|executed|cancelled)" },
+  { label: "Password reset", field: "subject", match: "regex", value: "reset your password|password reset" },
+];
+
 function refreshMatchOptions() {
   const field = el("ruleField").value;
   const matchSelect = el("ruleMatch");
@@ -105,6 +125,36 @@ function refreshValuePlaceholder() {
   checkbox.disabled = !applies;
   if (!applies) checkbox.checked = false;
   checkbox.title = applies ? "" : "Not applicable — email addresses are always matched case-insensitively";
+}
+
+function renderRulePresets() {
+  const container = el("rulePresets");
+  container.innerHTML = "";
+  RULE_PRESETS.forEach((preset) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "preset-chip";
+    chip.textContent = preset.label;
+    chip.title = preset.value; // hover shows the actual pattern before committing to it
+    chip.onclick = () => applyPreset(preset);
+    container.appendChild(chip);
+  });
+}
+
+/**
+ * Fills the rule form from a preset and leaves focus in the value field —
+ * paired with Enter-to-submit below, the flow is: click a chip, glance at
+ * the pattern, hit Enter. No typing required for the common cases at all.
+ */
+function applyPreset(preset) {
+  el("ruleField").value = preset.field;
+  refreshMatchOptions(); // rebuilds the Match dropdown for the new field first
+  el("ruleMatch").value = preset.match;
+  refreshValuePlaceholder();
+  el("ruleValue").value = preset.value;
+  el("ruleValue").focus();
+  el("ruleValue").select();
+  el("ruleError").textContent = "";
 }
 
 // Fields that are meaningless while AI fallback is switched off — greyed out
@@ -180,6 +230,31 @@ function renderMatchLog(log) {
       <div class="meta">${escapeHtml(entry.from)} · ${escapeHtml(entry.matchedBy)}</div>
       <div class="meta">${escapeHtml(time)}</div>
     `;
+
+    // If this one was caught by the AI fallback, offer to turn it into a
+    // permanent, free, instant rule — closes the loop from "AI noticed
+    // this" to "now it's a hard rule" without retyping anything.
+    if (entry.matchedBy?.startsWith("AI match") && entry.from) {
+      const domain = extractDomain(entry.from);
+      if (domain) {
+        const addBtn = document.createElement("button");
+        addBtn.className = "rule-log-add";
+        addBtn.textContent = `+ Make this a rule (${domain})`;
+        addBtn.onclick = async () => {
+          const { added, rules } = await addRuleIfNew({
+            field: "from",
+            match: "domain",
+            value: domain,
+            caseSensitive: false,
+          });
+          renderRules(rules);
+          addBtn.textContent = added ? "✓ Rule added" : "Already a rule";
+          addBtn.disabled = true;
+        };
+        div.lastElementChild.appendChild(addBtn);
+      }
+    }
+
     container.appendChild(div);
   });
 }
@@ -216,6 +291,7 @@ async function init() {
   el("pollInterval").value = String(settings.pollIntervalMinutes);
 
   renderRules(rules);
+  renderRulePresets();
   renderMatchLog(log);
   refreshTabStatus();
   refreshMatchOptions(); // populate Match dropdown correctly for the default Field on load
@@ -242,8 +318,34 @@ async function init() {
     setTimeout(refreshTabStatus, 1500);
   };
 
-  el("addRuleBtn").onclick = async () => {
-    const value = el("ruleValue").value.trim();
+  /**
+   * If "From domain" is selected and the value looks like a full email
+   * address rather than a bare domain, narrow it down. This is called from
+   * every path that can produce a saved/tested rule (Enter, the Add
+   * button, and the preview check) — not just the blur listener below —
+   * so a rule can never end up saved with the wrong shape no matter how
+   * it was submitted.
+   */
+  function autoNormalizeDomainValue(raw) {
+    if (el("ruleField").value !== "from" || el("ruleMatch").value !== "domain") return raw;
+    if (!raw.includes("@")) return raw;
+    return extractDomain(raw) || raw;
+  }
+
+  el("addRuleBtn").onclick = async () => addCurrentDraftAsRule();
+
+  // Enter-to-submit: the value field is the last thing anyone types before
+  // wanting the rule saved — requiring a separate click to the button below
+  // it is friction with no purpose.
+  el("ruleValue").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addCurrentDraftAsRule();
+    }
+  });
+
+  async function addCurrentDraftAsRule() {
+    const value = autoNormalizeDomainValue(el("ruleValue").value.trim());
     el("ruleError").textContent = "";
     if (!value) return;
     const field = el("ruleField").value;
@@ -254,32 +356,45 @@ async function init() {
       return;
     }
 
-    const existingRules = await getRules();
-    const caseSensitive = el("ruleCaseSensitive").checked;
-
-    // Skip adding an identical rule twice (e.g. an accidental double-click) —
-    // it would work fine but just clutters the list with a duplicate. Note
-    // this checks caseSensitive too: a case-sensitive and case-insensitive
-    // rule with the same text are meaningfully different rules, not dupes.
-    const alreadyExists = existingRules.some(
-      (r) =>
-        r.field === field &&
-        r.match === match &&
-        r.value.toLowerCase() === value.toLowerCase() &&
-        !!r.caseSensitive === caseSensitive
-    );
-    if (alreadyExists) {
-      el("ruleValue").value = "";
-      return;
-    }
-
-    const newRule = { id: uid(), field, match, value, caseSensitive };
-    const updated = [...existingRules, newRule];
-    await saveRules(updated);
-    renderRules(updated);
+    const { added, rules } = await addRuleIfNew({
+      field,
+      match,
+      value,
+      caseSensitive: el("ruleCaseSensitive").checked,
+    });
+    renderRules(rules);
     el("ruleValue").value = "";
     el("ruleCaseSensitive").checked = false;
-  };
+    if (!added) {
+      el("ruleError").style.color = "#5f6368";
+      el("ruleError").textContent = "That rule already exists.";
+    }
+  }
+
+  // Visual feedback for the same normalization above: narrow the field's
+  // displayed value on blur too, so what you see is what actually got saved.
+  el("ruleValue").addEventListener("blur", () => {
+    const normalized = autoNormalizeDomainValue(el("ruleValue").value.trim());
+    if (normalized && normalized !== el("ruleValue").value) el("ruleValue").value = normalized;
+  });
+
+  // Live preview, debounced: updates the same hint text as the manual
+  // "Preview matches" button, but automatically a moment after typing
+  // pauses — so the common case (typing a pattern and immediately wanting
+  // to know if it works) needs zero extra clicks. The explicit button
+  // still exists for re-checking on demand (e.g. after switching Gmail
+  // tabs to a different set of visible emails).
+  let livePreviewTimer = null;
+  el("ruleValue").addEventListener("input", () => {
+    clearTimeout(livePreviewTimer);
+    livePreviewTimer = setTimeout(runPreview, 500);
+  });
+  el("ruleField").addEventListener("change", () => {
+    if (el("ruleValue").value.trim()) runPreview();
+  });
+  el("ruleMatch").addEventListener("change", () => {
+    if (el("ruleValue").value.trim()) runPreview();
+  });
 
   // Tests a DRAFT rule (not yet saved) against whatever's actually visible
   // in your Gmail tab right now — so you can confirm a regex or keyword
@@ -287,31 +402,34 @@ async function init() {
   // instead of waiting for real mail to arrive to find out it doesn't.
   // Deliberately read-only: it never marks anything as seen or fires a
   // real notification (see GET_CURRENT_INBOX_ROWS in background.js).
-  el("previewRuleBtn").onclick = async () => {
-    const value = el("ruleValue").value.trim();
+  async function runPreview({ showCheckingState = false } = {}) {
+    const value = autoNormalizeDomainValue(el("ruleValue").value.trim());
     const errorEl = el("ruleError");
     errorEl.style.color = "";
-    errorEl.textContent = "";
 
     if (!value) {
-      errorEl.textContent = "Enter a value first.";
+      if (showCheckingState) errorEl.textContent = "Enter a value first.";
       return;
     }
     const field = el("ruleField").value;
     const match = el("ruleMatch").value;
     if (match === "regex" && !isValidRegex(value)) {
-      errorEl.textContent = "That's not a valid regular expression — check the brackets/escaping.";
-      return;
+      if (showCheckingState) errorEl.textContent = "That's not a valid regular expression — check the brackets/escaping.";
+      return; // live-typing auto-preview stays quiet on an incomplete/invalid pattern rather than nagging mid-keystroke
     }
 
-    el("previewRuleBtn").disabled = true;
-    el("previewRuleBtn").textContent = "Checking…";
+    if (showCheckingState) {
+      el("previewRuleBtn").disabled = true;
+      el("previewRuleBtn").textContent = "Checking…";
+    }
     const { rows, tabCount } = await chrome.runtime.sendMessage({ type: "GET_CURRENT_INBOX_ROWS" });
-    el("previewRuleBtn").disabled = false;
-    el("previewRuleBtn").textContent = "Preview matches";
+    if (showCheckingState) {
+      el("previewRuleBtn").disabled = false;
+      el("previewRuleBtn").textContent = "Preview matches";
+    }
 
     if (tabCount === 0) {
-      errorEl.textContent = "No Gmail tab open to preview against — open one first.";
+      if (showCheckingState) errorEl.textContent = "No Gmail tab open to preview against — open one first.";
       return;
     }
 
@@ -322,7 +440,9 @@ async function init() {
       matchCount > 0
         ? `✓ Would match ${matchCount} of ${rows.length} currently visible emails.`
         : `No matches among the ${rows.length} currently visible emails — check your pattern.`;
-  };
+  }
+
+  el("previewRuleBtn").onclick = () => runPreview({ showCheckingState: true });
 
   // Rules only ever live in this one browser's local storage — no sync
   // across machines, and they're gone if you ever uninstall. Export/import

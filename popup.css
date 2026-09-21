@@ -57,6 +57,14 @@ textarea { min-height: 50px; resize: vertical; }
 .rule-form input { flex: 2; margin-top: 0; }
 .rule-form button { flex-basis: 100%; margin-top: 6px; }
 .rule-case-sensitive { flex-basis: 100%; margin-top: 4px; }
+.rule-presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.preset-chip {
+  background: #eef1f3; color: #3c4043; border: 1px solid #dadce0;
+  border-radius: 14px; padding: 3px 10px; font-size: 11px; cursor: pointer;
+}
+.preset-chip:hover { background: #e2e6e9; }
+.rule-log-add { background: none; border: none; color: #1a73e8; font-size: 11px; cursor: pointer; padding: 0; margin-left: 6px; }
+.rule-log-add:hover { text-decoration: underline; }
 .rule-io { display: flex; gap: 6px; margin-top: 8px; }
 .rule-io button { flex: 1; }
 .rule-error { color: #c62828; font-size: 11px; margin: 4px 0 0; flex-basis: 100%; }

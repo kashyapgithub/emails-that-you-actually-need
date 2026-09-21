@@ -65,6 +65,8 @@ Nothing here logs in, authenticates, or touches Gmail's servers directly —
 | 🔍 **Preview before you save** | Test a draft rule against your real, current inbox with zero side effects |
 | 🔔 **Toolbar badge** | See match count at a glance — no need to open the popup |
 | 💾 **Export/import rules** | Rules live only on this machine (no cloud sync) — back them up or move them to another install as JSON |
+| ⚡ **Right-click to add a rule** | Select a sender in Gmail, right-click, done — no popup required |
+| 🎛️ **One-click rule templates + live preview** | Chips for common categories, with match count updating as you type |
 
 ## Requirements
 
@@ -89,6 +91,31 @@ Nothing here logs in, authenticates, or touches Gmail's servers directly —
 3. Click the toolbar icon → add a rule → flip the toggle on
 
 See [Requirements](#requirements) for the one thing this needs to keep running.
+
+## Building a rule fast
+
+There are three ways to add a rule, from fastest to most precise:
+
+**Right-click, straight from Gmail (no popup needed).** Select a sender's
+name or email address in any inbox row, right-click, and choose *"Add
+'...' as a watch rule."* If the selection looks like an email address, it
+adds a domain rule (catches every sender at that company); otherwise it
+adds a "From contains" rule on the selected text. A quick confirmation
+notification tells you which one it picked and confirms it wasn't already
+in your list.
+
+**One-click templates in the popup.** The chips above the rule form —
+OTP/verification codes, invoices, trading alerts, password resets — fill in
+a working regex pattern for you. Click a chip, glance at the pattern (shown
+on hover before you commit), hit **Enter**. As you type or edit any field,
+a live match count against your current inbox updates automatically below
+the form — no need to click "Preview matches" unless you want to re-check
+after switching to a different email.
+
+**Promote an AI match into a permanent rule.** Every AI-fallback match in
+the "Recent matches" list gets a *"+ Make this a rule"* link for that
+sender's domain — the natural next step once the AI has caught something a
+few times and you'd rather it be an instant, free rule from now on.
 
 ## Building a rule
 
