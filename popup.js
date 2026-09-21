@@ -9,7 +9,7 @@
  */
 
 import { getSettings, saveSettings, getRules, saveRules, getMatchLog, clearMatchLog, resetUnseenCount } from "./lib/storage.js";
-import { describeRule, isValidRegex, ruleMatches } from "./lib/ruleMatcher.js";
+import { describeRule, isValidRegex, ruleMatches, caseSensitivityApplies } from "./lib/ruleMatcher.js";
 import { updateBadge } from "./lib/notifier.js";
 
 const el = (id) => document.getElementById(id);
@@ -95,6 +95,16 @@ function refreshValuePlaceholder() {
     match === "regex"
       ? VALUE_PLACEHOLDER_BY_FIELD_AND_MATCH[regexKey]
       : VALUE_PLACEHOLDER_BY_FIELD[field] || "";
+
+  // Case sensitivity has no effect on domain or exact-address comparisons —
+  // addresses are always compared case-insensitively, matching how every
+  // real mail system treats them — so grey out the checkbox rather than
+  // let it silently do nothing.
+  const applies = caseSensitivityApplies({ field, match });
+  const checkbox = el("ruleCaseSensitive");
+  checkbox.disabled = !applies;
+  if (!applies) checkbox.checked = false;
+  checkbox.title = applies ? "" : "Not applicable — email addresses are always matched case-insensitively";
 }
 
 // Fields that are meaningless while AI fallback is switched off — greyed out
@@ -175,10 +185,16 @@ function renderMatchLog(log) {
 }
 
 async function refreshTabStatus() {
-  const { tabCount } = await chrome.runtime.sendMessage({ type: "GET_TAB_COUNT" });
+  const { tabCount, inboxTabCount } = await chrome.runtime.sendMessage({ type: "GET_TAB_COUNT" });
   const status = el("tabStatus");
-  if (tabCount > 0) {
-    status.textContent = `Watching ${tabCount} open Gmail tab${tabCount > 1 ? "s" : ""}.`;
+  if (inboxTabCount > 0) {
+    status.textContent = `Watching ${inboxTabCount} Gmail tab${inboxTabCount > 1 ? "s" : ""} on the inbox.`;
+  } else if (tabCount > 0) {
+    // A Gmail tab exists, but it's parked on Sent/Drafts/a label/search —
+    // scanning is effectively paused until it's back on the inbox. This is
+    // a real, silent-by-default state worth surfacing rather than just
+    // claiming "watching" when nothing is actually being scanned.
+    status.textContent = `${tabCount} Gmail tab${tabCount > 1 ? "s" : ""} open, but none on the inbox — switch one back to resume watching.`;
   } else {
     status.textContent = "No Gmail tab open — one will open automatically once you turn watching on.";
   }
@@ -239,21 +255,30 @@ async function init() {
     }
 
     const existingRules = await getRules();
+    const caseSensitive = el("ruleCaseSensitive").checked;
+
     // Skip adding an identical rule twice (e.g. an accidental double-click) —
-    // it would work fine but just clutters the list with a duplicate.
+    // it would work fine but just clutters the list with a duplicate. Note
+    // this checks caseSensitive too: a case-sensitive and case-insensitive
+    // rule with the same text are meaningfully different rules, not dupes.
     const alreadyExists = existingRules.some(
-      (r) => r.field === field && r.match === match && r.value.toLowerCase() === value.toLowerCase()
+      (r) =>
+        r.field === field &&
+        r.match === match &&
+        r.value.toLowerCase() === value.toLowerCase() &&
+        !!r.caseSensitive === caseSensitive
     );
     if (alreadyExists) {
       el("ruleValue").value = "";
       return;
     }
 
-    const newRule = { id: uid(), field, match, value, caseSensitive: false };
+    const newRule = { id: uid(), field, match, value, caseSensitive };
     const updated = [...existingRules, newRule];
     await saveRules(updated);
     renderRules(updated);
     el("ruleValue").value = "";
+    el("ruleCaseSensitive").checked = false;
   };
 
   // Tests a DRAFT rule (not yet saved) against whatever's actually visible
@@ -290,7 +315,7 @@ async function init() {
       return;
     }
 
-    const draftRule = { field, match, value, caseSensitive: false };
+    const draftRule = { field, match, value, caseSensitive: el("ruleCaseSensitive").checked };
     const matchCount = rows.filter((row) => ruleMatches(draftRule, row)).length;
     errorEl.style.color = matchCount > 0 ? "#2e7d32" : "#5f6368";
     errorEl.textContent =

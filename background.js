@@ -99,7 +99,7 @@ async function processScannedRowsInternal(rows) {
 
       if (matchReason) {
         matchedCount++;
-        notifyMatch(email, matchReason);
+        await notifyMatch(email, matchReason);
         await appendMatchLog({
           id: email.id,
           from: email.from,
@@ -185,7 +185,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true, tabCount: tabs.length, matched: result.matched });
     } else if (message.type === "GET_TAB_COUNT") {
       const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
-      sendResponse({ tabCount: tabs.length });
+      // A tab "counts" as watching only if it's actually showing the inbox —
+      // a Gmail tab parked on Sent/Drafts/a label isn't contributing any
+      // scans, and the popup should say so rather than just "1 tab open."
+      const inboxTabCount = tabs.filter((tab) => {
+        const hash = new URL(tab.url).hash;
+        return hash === "" || hash.startsWith("#inbox");
+      }).length;
+      sendResponse({ tabCount: tabs.length, inboxTabCount });
     } else if (message.type === "GET_CURRENT_INBOX_ROWS") {
       // Used by the popup's "Preview matches" button — deliberately read-only:
       // it fetches the currently visible rows WITHOUT marking them as seen or

@@ -78,14 +78,48 @@ function collectRows() {
   rows.forEach((row) => {
     const email = extractRow(row);
     if (!email) return;
-    const id = fingerprint(`${email.from}|${email.subject}|${email.snippet.slice(0, 40)}`);
+    // The ID needs to survive two competing failure modes:
+    //  1. Two DIFFERENT threads with near-identical templated content (very
+    //     common for repeated trading/order-status alerts) must not hash to
+    //     the same ID — that would silently swallow the second one.
+    //  2. Multiple DIFFERENT messages that Gmail groups into the SAME
+    //     thread (e.g. "Order Placed" -> "Order Executed" -> "Order
+    //     Cancelled", all sharing a subject) must NOT collapse into one ID
+    //     either — that would mean only the first message in a thread ever
+    //     notifies, and every real update after it goes silent.
+    // Folding the thread ID into the same hash as the content solves both:
+    // different threads never collide even with identical content, and
+    // different content within the same thread still produces different
+    // IDs. Only a truly identical row re-read on a later scan (the actual
+    // "already seen this" case) hashes the same, which is what we want.
+    const id = fingerprint(
+      `${row.getAttribute("data-legacy-thread-id") || ""}|${email.from}|${email.subject}|${email.snippet.slice(0, 40)}`
+    );
     found.push({ id, ...email });
   });
   return found;
 }
 
+/**
+ * Gmail's URL hash tells us which view is on screen — "#inbox" (including
+ * "#inbox/<threadId>" when a single thread is open) for the inbox, but
+ * "#sent", "#drafts", "#label/x", "#search/..." etc. for everything else.
+ * Category tabs (Primary/Social/Promotions) don't change the hash, so this
+ * doesn't interfere with that separate, already-documented limitation.
+ *
+ * Without this check, if the pinned Gmail tab ever gets navigated away from
+ * the inbox — a stray click, a bookmark, anything — scanning would keep
+ * silently reading whatever's on screen instead, while the popup still
+ * claimed to be "watching."
+ */
+function isOnInboxView() {
+  const hash = location.hash;
+  return hash === "" || hash.startsWith("#inbox");
+}
+
 function scanInbox() {
   if (!isRunning) return; // master switch is off — do nothing, not even a DOM query
+  if (!isOnInboxView()) return; // this tab has navigated away from the inbox — nothing to read
   const found = collectRows();
   if (found.length > 0) {
     chrome.runtime.sendMessage({ type: "GMAIL_ROWS", rows: found }).catch(() => {
@@ -137,6 +171,6 @@ observer.observe(document.body, { childList: true, subtree: true });
 // what actually happened rather than guessing with a timer.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "SCAN_NOW") {
-    sendResponse({ rows: collectRows() });
+    sendResponse({ rows: isOnInboxView() ? collectRows() : [], onInboxView: isOnInboxView() });
   }
 });
