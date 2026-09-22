@@ -52,10 +52,20 @@ function injectHighlightStyles() {
       0%   { background-color: rgba(211, 47, 47, 0.35); }
       100% { background-color: rgba(211, 47, 47, 0.07); }
     }
+    @keyframes gcw-pulse-critical {
+      0%   { background-color: rgba(245, 124, 0, 0.55); }
+      50%  { background-color: rgba(245, 124, 0, 0.25); }
+      100% { background-color: rgba(245, 124, 0, 0.12); }
+    }
     tr.gcw-matched-row {
       animation: gcw-pulse 1.8s ease-out;
       background-color: rgba(211, 47, 47, 0.07) !important;
       box-shadow: inset 4px 0 0 0 #d32f2f !important;
+    }
+    tr.gcw-matched-row-critical {
+      animation: gcw-pulse-critical 2.4s ease-in-out 2;
+      background-color: rgba(245, 124, 0, 0.12) !important;
+      box-shadow: inset 4px 0 0 0 #f57c00 !important;
     }
   `;
   document.documentElement.appendChild(style);
@@ -153,11 +163,11 @@ function collectRows() {
 function highlightMatches(matches) {
   if (!highlightEnabled) return;
   injectHighlightStyles();
-  matches.forEach(({ id, matchedBy }) => {
+  matches.forEach(({ id, matchedBy, priority }) => {
     const row = lastRowElementsById.get(id);
     if (!row) return;
-    row.classList.add("gcw-matched-row");
-    row.title = `Gmail Category Watcher: ${matchedBy}`;
+    row.classList.add(priority === "critical" ? "gcw-matched-row-critical" : "gcw-matched-row");
+    row.title = `Gmail Category Watcher${priority === "critical" ? " (critical)" : ""}: ${matchedBy}`;
   });
 }
 

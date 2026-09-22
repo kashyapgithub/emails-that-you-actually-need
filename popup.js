@@ -17,6 +17,7 @@ import {
   getMatchLog,
   clearMatchLog,
   resetUnseenCount,
+  getStats,
 } from "./lib/storage.js";
 import { describeRule, isValidRegex, ruleMatches, caseSensitivityApplies, extractDomain } from "./lib/ruleMatcher.js";
 import { updateBadge } from "./lib/notifier.js";
@@ -263,6 +264,26 @@ function renderMatchLog(log) {
   });
 }
 
+function renderStatsLine(stats, log) {
+  const statsEl = el("statsLine");
+  const parts = [`Today: ${stats.todayCount}`, `All-time: ${stats.totalMatches}`];
+
+  // "Top trigger" is computed from the visible (capped) log, so it's an
+  // approximation over your most recent matches, not a lifetime ranking —
+  // good enough for a quick glance, not worth a separate storage counter.
+  if (log.length > 0) {
+    const counts = {};
+    log.forEach((entry) => {
+      const domain = entry.from?.match(/@([\w.-]+)/)?.[1];
+      if (domain) counts[domain] = (counts[domain] || 0) + 1;
+    });
+    const topEntry = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    if (topEntry && topEntry[1] > 1) parts.push(`Top: ${topEntry[0]} (${topEntry[1]})`);
+  }
+
+  statsEl.textContent = parts.join(" · ");
+}
+
 async function refreshTabStatus() {
   const { tabCount, inboxTabCount } = await chrome.runtime.sendMessage({ type: "GET_TAB_COUNT" });
   const status = el("tabStatus");
@@ -285,6 +306,7 @@ async function init() {
   const settings = await getSettings();
   const rules = await getRules();
   const log = await getMatchLog();
+  const stats = await getStats();
 
   el("runningToggle").checked = settings.isRunning;
   el("aiEnabled").checked = settings.aiFallbackEnabled;
@@ -294,10 +316,15 @@ async function init() {
   el("aiApiKey").value = settings.aiApiKey;
   el("pollInterval").value = String(settings.pollIntervalMinutes);
   el("highlightToggle").checked = settings.highlightInGmail;
+  el("aiCritical").checked = settings.aiMatchesAreCritical;
+  el("quietHoursEnabled").checked = settings.quietHoursEnabled;
+  el("quietHoursStart").value = settings.quietHoursStart;
+  el("quietHoursEnd").value = settings.quietHoursEnd;
 
   renderRules(rules);
   renderRulePresets();
   renderMatchLog(log);
+  renderStatsLine(stats, log);
   refreshTabStatus();
   refreshMatchOptions(); // populate Match dropdown correctly for the default Field on load
   refreshAiFieldState();
@@ -368,10 +395,12 @@ async function init() {
       match,
       value,
       caseSensitive: el("ruleCaseSensitive").checked,
+      priority: el("ruleCritical").checked ? "critical" : "normal",
     });
     renderRules(rules);
     el("ruleValue").value = "";
     el("ruleCaseSensitive").checked = false;
+    el("ruleCritical").checked = false;
     if (!added) {
       el("ruleError").style.color = "#5f6368";
       el("ruleError").textContent = "That rule already exists.";
@@ -509,6 +538,7 @@ async function init() {
           match: candidate.match,
           value: candidate.value,
           caseSensitive: !!candidate.caseSensitive,
+          priority: candidate.priority === "critical" ? "critical" : "normal",
         });
         added++;
       }
@@ -529,6 +559,7 @@ async function init() {
   el("clearLogBtn").onclick = async () => {
     await clearMatchLog();
     renderMatchLog([]);
+    renderStatsLine(await getStats(), []);
   };
 
   // Save-on-change for every AI/settings field, so nothing needs an explicit "Save" button.
@@ -541,6 +572,10 @@ async function init() {
       aiApiKey: el("aiApiKey").value,
       pollIntervalMinutes: Number(el("pollInterval").value),
       highlightInGmail: el("highlightToggle").checked,
+      aiMatchesAreCritical: el("aiCritical").checked,
+      quietHoursEnabled: el("quietHoursEnabled").checked,
+      quietHoursStart: el("quietHoursStart").value || "22:00",
+      quietHoursEnd: el("quietHoursEnd").value || "07:00",
     });
   };
 
@@ -548,6 +583,10 @@ async function init() {
     el(id).addEventListener("change", persistSettings);
   });
   el("highlightToggle").addEventListener("change", persistSettings);
+  el("aiCritical").addEventListener("change", persistSettings);
+  ["quietHoursEnabled", "quietHoursStart", "quietHoursEnd"].forEach((id) => {
+    el(id).addEventListener("change", persistSettings);
+  });
 
   // Auto-fill a working default model whenever the provider changes,
   // rather than leaving e.g. "claude-sonnet-4-6" selected under OpenRouter.

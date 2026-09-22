@@ -23,7 +23,33 @@ import {
   appendMatchLog,
   incrementUnseenCount,
   addRuleIfNew,
+  recordMatchForStats,
 } from "./lib/storage.js";
+
+/**
+ * True if right now falls inside the configured quiet-hours window.
+ * Handles the overnight case (e.g. 22:00 -> 07:00) by checking whether
+ * "now" is on either side of midnight relative to the window, not just a
+ * simple start < now < end comparison, which would be wrong whenever the
+ * window crosses midnight.
+ */
+function isWithinQuietHours(settings) {
+  if (!settings.quietHoursEnabled) return false;
+  const [startH, startM] = settings.quietHoursStart.split(":").map(Number);
+  const [endH, endM] = settings.quietHoursEnd.split(":").map(Number);
+  if ([startH, startM, endH, endM].some(Number.isNaN)) return false;
+
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+
+  if (startMinutes === endMinutes) return false; // zero-length window = effectively disabled
+  if (startMinutes < endMinutes) {
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes; // same-day window
+  }
+  return nowMinutes >= startMinutes || nowMinutes < endMinutes; // wraps midnight
+}
 
 const CONTEXT_MENU_ID = "gcw-add-sender-rule";
 
@@ -136,29 +162,44 @@ async function processScannedRowsInternal(rows) {
     settings.categoryDescription.trim().length > 0;
 
   let matchedCount = 0;
-  const matchedRows = []; // {id, matchedBy} for every real match this batch — used to flag rows live in Gmail
+  const matchedRows = []; // {id, matchedBy, priority} for every real match this batch — used to flag rows live in Gmail
+  const inQuietHours = isWithinQuietHours(settings);
 
   for (const email of unseen) {
     try {
       const matchedRule = findMatchingRule(rules, email);
       let matchReason = matchedRule ? `Rule match: ${describeRule(matchedRule)}` : null;
+      let priority = matchedRule?.priority === "critical" ? "critical" : "normal";
 
       if (!matchedRule && aiFallbackUsable) {
         const aiMatch = await classifyEmail(settings, email);
-        if (aiMatch) matchReason = `AI match: "${settings.categoryDescription}"`;
+        if (aiMatch) {
+          matchReason = `AI match: "${settings.categoryDescription}"`;
+          priority = settings.aiMatchesAreCritical ? "critical" : "normal";
+        }
       }
 
       if (matchReason) {
         matchedCount++;
-        matchedRows.push({ id: email.id, matchedBy: matchReason });
-        await notifyMatch(email, matchReason);
+        matchedRows.push({ id: email.id, matchedBy: matchReason, priority });
+        await recordMatchForStats();
         await appendMatchLog({
           id: email.id,
           from: email.from,
           subject: email.subject,
           matchedBy: matchReason,
+          priority,
           timestamp: Date.now(),
         });
+
+        // Quiet hours suppress the OS notification popup/sound for NORMAL
+        // matches only — critical matches always notify regardless, since
+        // "critical" specifically means "wake me up for this." Detection,
+        // logging, the badge, and the live Gmail highlight all still
+        // happen either way; only the popup/sound is what's held back.
+        if (priority === "critical" || !inQuietHours) {
+          await notifyMatch(email, matchReason, priority);
+        }
       }
     } catch (err) {
       console.error("[Gmail Category Watcher] Error processing a row:", err.message);

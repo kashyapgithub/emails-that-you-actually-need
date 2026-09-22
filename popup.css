@@ -126,3 +126,7 @@ input:checked + .slider::before { transform: translateX(16px); }
   70%  { box-shadow: 0 0 0 6px rgba(46, 125, 50, 0); }
   100% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0); }
 }
+.rule-priority { margin-top: 4px; flex-basis: 100%; }
+.quiet-hours-range { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.quiet-hours-range input[type="time"] { flex: 1; margin-top: 0; }
+.stats-line { margin: -4px 0 8px; }

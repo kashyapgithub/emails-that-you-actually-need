@@ -35,6 +35,10 @@
         <input type="checkbox" id="ruleCaseSensitive" />
         Case sensitive
       </label>
+      <label class="checkbox-row rule-priority">
+        <input type="checkbox" id="ruleCritical" />
+        🔴 Critical — stay on screen until dismissed, ignore quiet hours
+      </label>
       <button id="addRuleBtn">Add rule</button>
       <button id="previewRuleBtn" class="secondary">Preview matches</button>
       <p id="ruleError" class="rule-error"></p>
@@ -64,6 +68,23 @@
       <input type="text" id="aiModel" placeholder="model name" />
     </div>
     <input type="password" id="aiApiKey" placeholder="Your API key (stored locally only)" />
+    <label class="checkbox-row">
+      <input type="checkbox" id="aiCritical" />
+      🔴 Treat AI matches as critical too
+    </label>
+  </section>
+
+  <section class="card">
+    <h2>Quiet hours <span class="hint">(critical matches always notify anyway)</span></h2>
+    <label class="checkbox-row">
+      <input type="checkbox" id="quietHoursEnabled" />
+      Silence normal-priority notifications during
+    </label>
+    <div class="quiet-hours-range">
+      <input type="time" id="quietHoursStart" />
+      <span>to</span>
+      <input type="time" id="quietHoursEnd" />
+    </div>
   </section>
 
   <section class="card">
@@ -84,6 +105,7 @@
 
   <section class="card">
     <h2>Recent matches</h2>
+    <p id="statsLine" class="hint stats-line"></p>
     <div id="matchLog"><p class="hint">No matches yet.</p></div>
     <button id="clearLogBtn" class="secondary">Clear log</button>
   </section>

@@ -64,6 +64,10 @@ don't have. This skips all of it by reading the inbox the same way you do.
 |---|---|
 | 🚫 **Zero setup** | Load unpacked, done. No client IDs, no consent screens. |
 | ✨ **Live inbox highlighting** | Matched emails pulse and glow directly inside Gmail — no popup needed to notice |
+| 🔴 **Critical priority** | Mark a rule (or all AI matches) as critical — persistent notification that won't auto-dismiss, gold highlight, ignores quiet hours |
+| 🌙 **Quiet hours** | Silence normal-priority notifications overnight (or any window) — critical ones still get through |
+| ⚡ **One-click "watch this sender"** | Right in the notification itself, or via right-click in Gmail |
+| 📊 **Stats at a glance** | Today's count, all-time total, and your most frequent trigger, right above the log |
 | 🎯 **Rule matching** | From / Subject / Body — contains, exact match, sender domain, or regex |
 | 🤖 **AI fallback** | Fuzzy category matching in plain English, when keywords aren't enough |
 | 🔌 **5 AI providers** | Anthropic, OpenAI, Gemini, xAI, OpenRouter — bring your own key |
@@ -124,6 +128,33 @@ after switching to a different email.
 the "Recent matches" list gets a *"+ Make this a rule"* link for that
 sender's domain — the natural next step once the AI has caught something a
 few times and you'd rather it be an instant, free rule from now on.
+
+**Right from the notification itself.** Every match notification has a
+*"+ Watch every email from ..."* button built in — no need to even glance
+at the popup or the log to turn a one-off match into a standing rule.
+
+## Priority: not every match deserves the same urgency
+
+A margin call and a newsletter shouldn't interrupt you the same way. Any
+rule (and the AI fallback as a whole, via its own checkbox) can be marked
+**🔴 Critical**, which changes real behavior, not just the label:
+
+| | Normal | Critical |
+|---|---|---|
+| Notification | Auto-dismisses normally | **Stays on screen until you dismiss it** |
+| Inbox highlight | Red pulse | **Gold pulse** |
+| Quiet hours | Silenced during the window | **Always notifies anyway** |
+
+## Quiet hours
+
+Turn on **Quiet hours** and set a window (say, 22:00–07:00) to silence
+normal-priority notifications overnight. Everything still happens
+underneath — the email still gets logged, the badge still increments, the
+Gmail highlight still appears — only the OS notification popup/sound is
+held back, and only for normal-priority matches. Critical ones always come
+through regardless, which is the entire point of marking something
+critical in the first place. The window correctly handles wrapping past
+midnight (22:00 → 07:00 works as you'd expect).
 
 ## Building a rule
 
