@@ -136,6 +136,7 @@ async function processScannedRowsInternal(rows) {
     settings.categoryDescription.trim().length > 0;
 
   let matchedCount = 0;
+  const matchedRows = []; // {id, matchedBy} for every real match this batch — used to flag rows live in Gmail
 
   for (const email of unseen) {
     try {
@@ -149,6 +150,7 @@ async function processScannedRowsInternal(rows) {
 
       if (matchReason) {
         matchedCount++;
+        matchedRows.push({ id: email.id, matchedBy: matchReason });
         await notifyMatch(email, matchReason);
         await appendMatchLog({
           id: email.id,
@@ -170,7 +172,7 @@ async function processScannedRowsInternal(rows) {
     await updateBadge(total);
   }
 
-  return { matched: matchedCount };
+  return { matched: matchedCount, matchedRows };
 }
 
 // A single promise chain that every batch of rows gets appended to, so
@@ -180,7 +182,7 @@ async function processScannedRowsInternal(rows) {
 // read the "not yet seen" list before either had written to it, letting
 // the same new email slip through as "unseen" twice: two AI calls, two
 // match-log entries, for one email.
-let processingQueue = Promise.resolve({ matched: 0 });
+let processingQueue = Promise.resolve({ matched: 0, matchedRows: [] });
 function processScannedRows(rows) {
   processingQueue = processingQueue
     .catch(() => {}) // don't let one bad batch break the chain for future batches
@@ -194,8 +196,18 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "GMAIL_ROWS") {
-    processScannedRows(message.rows);
-    return; // periodic/live scans are fire-and-forget; no popup is waiting on these
+    // Fire-and-forget from content.js's perspective, but once processing
+    // actually finishes, push back which rows matched so that tab can
+    // flag them live in the inbox — the visual "wow" companion to the
+    // notification, not a replacement for it.
+    const tabId = sender.tab?.id;
+    processScannedRows(message.rows).then(async (result) => {
+      if (!tabId || !result.matchedRows?.length) return;
+      const settings = await getSettings();
+      if (settings.highlightInGmail === false) return;
+      chrome.tabs.sendMessage(tabId, { type: "HIGHLIGHT_MATCHES", matches: result.matchedRows }).catch(() => {});
+    });
+    return;
   }
 
   (async () => {
@@ -231,6 +243,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       );
       const allRows = responses.filter(Boolean).flatMap((r) => r.rows || []);
       const result = await processScannedRows(allRows);
+
+      if (result.matchedRows?.length && settings.highlightInGmail !== false) {
+        tabs.forEach((tab) =>
+          chrome.tabs.sendMessage(tab.id, { type: "HIGHLIGHT_MATCHES", matches: result.matchedRows }).catch(() => {})
+        );
+      }
 
       sendResponse({ ok: true, tabCount: tabs.length, matched: result.matched });
     } else if (message.type === "GET_TAB_COUNT") {

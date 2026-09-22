@@ -108,3 +108,21 @@ button:disabled {
 }
 input:checked + .slider { background-color: #2e7d32; }
 input:checked + .slider::before { transform: translateX(16px); }
+.highlight-toggle { margin-top: 8px; }
+
+/* Live status dot next to the title — a small, honest "is it actually
+   watching right now" signal, not just decoration: green+pulsing means
+   isRunning is true, grey+still means it's off. */
+.status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #9aa0a6; margin-right: 6px; vertical-align: middle;
+}
+.status-dot.live {
+  background: #2e7d32;
+  animation: gcw-dot-pulse 1.8s ease-in-out infinite;
+}
+@keyframes gcw-dot-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.55); }
+  70%  { box-shadow: 0 0 0 6px rgba(46, 125, 50, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0); }
+}

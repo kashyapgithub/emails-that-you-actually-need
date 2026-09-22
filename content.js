@@ -29,6 +29,37 @@ const MUTATION_DEBOUNCE_MS = 2000; // coalesce bursts of Gmail's own DOM churn i
 
 let scanTimer = null;
 let isRunning = false; // mirrors settings.isRunning — the master on/off switch
+let highlightEnabled = true; // mirrors settings.highlightInGmail
+
+// Tracks id -> the actual DOM row element from the most recent scan, so
+// that when background.js reports back "these IDs just matched," we can
+// find and visually flag the right rows directly in Gmail's own inbox —
+// rebuilt fresh on every scan since Gmail can replace row elements outright.
+let lastRowElementsById = new Map();
+
+/**
+ * Injects the pulse animation once. Using a real CSS @keyframes animation
+ * (rather than a static color) is what makes a fresh match feel like it
+ * just *happened* — a warm flash that settles into a steady tinted state —
+ * instead of a static tag that's easy to miss scrolling past.
+ */
+function injectHighlightStyles() {
+  if (document.getElementById("gcw-highlight-styles")) return;
+  const style = document.createElement("style");
+  style.id = "gcw-highlight-styles";
+  style.textContent = `
+    @keyframes gcw-pulse {
+      0%   { background-color: rgba(211, 47, 47, 0.35); }
+      100% { background-color: rgba(211, 47, 47, 0.07); }
+    }
+    tr.gcw-matched-row {
+      animation: gcw-pulse 1.8s ease-out;
+      background-color: rgba(211, 47, 47, 0.07) !important;
+      box-shadow: inset 4px 0 0 0 #d32f2f !important;
+    }
+  `;
+  document.documentElement.appendChild(style);
+}
 
 /** Small, fast, non-cryptographic hash — just enough to dedupe rows. */
 function fingerprint(str) {
@@ -75,6 +106,7 @@ function extractRow(row) {
 function collectRows() {
   const rows = document.querySelectorAll("tr.zA");
   const found = [];
+  const elementMap = new Map();
   rows.forEach((row) => {
     const email = extractRow(row);
     if (!email) return;
@@ -96,8 +128,37 @@ function collectRows() {
       `${row.getAttribute("data-legacy-thread-id") || ""}|${email.from}|${email.subject}|${email.snippet.slice(0, 40)}`
     );
     found.push({ id, ...email });
+    elementMap.set(id, row);
   });
+  lastRowElementsById = elementMap;
   return found;
+}
+
+/**
+ * Flags rows directly in Gmail's own inbox — the "wow" feature. background.js
+ * calls this (via a message) right after it decides an email is a genuine
+ * new match, passing back only the IDs that matched and why.
+ *
+ * Deliberately minimal-risk: this only ever sets a className and a title
+ * attribute on the <tr> itself — never innerHTML, never a child insertion —
+ * so there's no way it can interfere with Gmail's own click handlers or
+ * layout. `row.title` gives a free native tooltip explaining the match on
+ * hover, no custom positioning code needed.
+ *
+ * One honest limitation: if Gmail later replaces this row's DOM element
+ * outright (e.g. a full list re-render), the highlight won't follow it —
+ * this is a "this just happened" flash, not a persisted state indicator.
+ * The notification and match log remain the durable record either way.
+ */
+function highlightMatches(matches) {
+  if (!highlightEnabled) return;
+  injectHighlightStyles();
+  matches.forEach(({ id, matchedBy }) => {
+    const row = lastRowElementsById.get(id);
+    if (!row) return;
+    row.classList.add("gcw-matched-row");
+    row.title = `Gmail Category Watcher: ${matchedBy}`;
+  });
 }
 
 /**
@@ -146,6 +207,7 @@ function startScanning(intervalMinutes) {
 /** Applies the current settings: starts/stops the timer and updates the isRunning flag used everywhere above. */
 function applySettings(settings) {
   isRunning = !!settings?.isRunning;
+  highlightEnabled = settings?.highlightInGmail !== false; // default on
   if (isRunning) {
     startScanning(settings?.pollIntervalMinutes || DEFAULT_INTERVAL_MINUTES);
   } else {
@@ -172,5 +234,7 @@ observer.observe(document.body, { childList: true, subtree: true });
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "SCAN_NOW") {
     sendResponse({ rows: isOnInboxView() ? collectRows() : [], onInboxView: isOnInboxView() });
+  } else if (message.type === "HIGHLIGHT_MATCHES") {
+    highlightMatches(message.matches || []);
   }
 });

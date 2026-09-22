@@ -7,7 +7,7 @@
 </head>
 <body>
   <header>
-    <h1>Gmail Category Watcher</h1>
+    <h1><span id="statusDot" class="status-dot"></span>Gmail Category Watcher</h1>
     <label class="switch">
       <input type="checkbox" id="runningToggle" />
       <span class="slider"></span>
@@ -76,6 +76,10 @@
       <option value="15">Every 15 minutes</option>
     </select>
     <button id="checkNowBtn">Check now</button>
+    <label class="checkbox-row highlight-toggle">
+      <input type="checkbox" id="highlightToggle" checked />
+      Flag matched emails directly in Gmail ✨
+    </label>
   </section>
 
   <section class="card">

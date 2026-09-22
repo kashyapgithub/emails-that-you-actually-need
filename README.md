@@ -4,7 +4,7 @@
 
 **Tell it what kind of email matters. It watches your inbox and pings you the moment one shows up.**
 
-No OAuth. No Google Cloud project. No API dashboard tour. Load it and it works.
+No OAuth. No Google Cloud project. No API dashboard tour. Load it and it works — and matched emails **light up right inside your inbox** the instant they land.
 
 ![Manifest V3](https://img.shields.io/badge/manifest-v3-4285F4?logo=googlechrome&logoColor=white)
 ![Zero OAuth](https://img.shields.io/badge/setup-zero%20OAuth-2e7d32)
@@ -23,19 +23,15 @@ No OAuth. No Google Cloud project. No API dashboard tour. Load it and it works.
 > pauses until one is open again. If none is open when you flip watching
 > on, it opens a pinned one for you automatically — see [Requirements](#requirements).
 
-## The problem this solves
+## The moment that sells it
 
-Your inbox has exactly one email you actually need to see today, buried under
-forty you don't. Gmail's own filters only understand exact keywords. Zapier/
-Make.com want you to wire up a scenario and pay per run. The "proper" way —
-the Gmail API — wants an OAuth consent screen, a Google Cloud project, a
-verified app, and twenty minutes you don't have.
-
-This skips all of it. It reads your inbox the same way *you* do — off the
-rendered page — and decides what's worth a notification using either plain
-rules or an AI's judgment call.
-
-## How it works
+A matching email doesn't just trigger a notification — it **flashes and
+glows directly inside your Gmail inbox**, live, the instant it's detected. A
+warm red pulse ripples across the row and settles into a soft tinted
+highlight with a left-edge accent bar, and hovering it shows exactly why it
+matched. No refresh, no popup, nothing to check — you just glance at Gmail
+and the email that mattered is visibly, unmistakably different from the
+forty that didn't.
 
 ```mermaid
 flowchart LR
@@ -45,17 +41,29 @@ flowchart LR
     C -->|No, AI fallback on| D["🤖 AI classifier<br/>Claude · GPT · Gemini · Grok · OpenRouter"]
     D -->|Match| E
     D -->|No match| F["Ignore"]
+    E --> H["✨ Row pulses live in Gmail"]
     E --> G["Chrome notification<br/>click → opens the email"]
 ```
 
 Nothing here logs in, authenticates, or touches Gmail's servers directly —
-`content.js` only ever *reads* the page you're already signed into.
+`content.js` only ever *reads* the page you're already signed into, and the
+highlight only ever sets a CSS class and a hover tooltip on the row — never
+touching its contents, so there's no way it can interfere with Gmail's own
+clicks or layout.
+
+## Why this exists
+
+Gmail's own filters only understand exact keywords. Zapier/Make.com want a
+scenario wired up and pay per run. The "proper" way — the Gmail API — wants
+an OAuth consent screen, a Google Cloud project, and twenty minutes you
+don't have. This skips all of it by reading the inbox the same way you do.
 
 ## Features
 
 | | |
 |---|---|
 | 🚫 **Zero setup** | Load unpacked, done. No client IDs, no consent screens. |
+| ✨ **Live inbox highlighting** | Matched emails pulse and glow directly inside Gmail — no popup needed to notice |
 | 🎯 **Rule matching** | From / Subject / Body — contains, exact match, sender domain, or regex |
 | 🤖 **AI fallback** | Fuzzy category matching in plain English, when keywords aren't enough |
 | 🔌 **5 AI providers** | Anthropic, OpenAI, Gemini, xAI, OpenRouter — bring your own key |
@@ -253,6 +261,13 @@ none) — it isn't safe from someone who already has access to your machine.
 - **Gmail tab requirement** — see [Requirements](#requirements) above.
 - **The toolbar badge count resets when you open the popup** — opening it
   *is* the acknowledgment, same as clearing a notifications tray.
+- **The live inbox highlight is a "this just happened" flash, not a
+  persisted flag** — if Gmail later re-renders its row list wholesale (a
+  full page reload, for instance), the highlight won't survive that,
+  though it won't re-appear on a re-scan either since the email is already
+  marked as seen. The notification and the match log are the durable
+  record; the glow is the moment, not the archive. Turn it off entirely
+  with the checkbox next to Poll interval if you'd rather keep it subtle.
 - **Sees the current inbox page** (~50 conversations, Gmail's default) —
   not your whole mailbox. New mail always lands at the top of page one, so
   this is a non-issue in practice.

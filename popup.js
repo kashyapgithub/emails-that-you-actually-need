@@ -176,6 +176,10 @@ function refreshCheckNowAvailability(isRunning) {
   btn.title = isRunning ? "" : "Turn on watching (top-right toggle) first";
 }
 
+function refreshStatusDot(isRunning) {
+  el("statusDot").classList.toggle("live", !!isRunning);
+}
+
 function renderRules(rules) {
   const container = el("ruleList");
   container.innerHTML = "";
@@ -289,6 +293,7 @@ async function init() {
   el("aiModel").value = settings.aiModel;
   el("aiApiKey").value = settings.aiApiKey;
   el("pollInterval").value = String(settings.pollIntervalMinutes);
+  el("highlightToggle").checked = settings.highlightInGmail;
 
   renderRules(rules);
   renderRulePresets();
@@ -297,6 +302,7 @@ async function init() {
   refreshMatchOptions(); // populate Match dropdown correctly for the default Field on load
   refreshAiFieldState();
   refreshCheckNowAvailability(settings.isRunning);
+  refreshStatusDot(settings.isRunning);
 
   // Opening the popup IS the acknowledgment — clear the "you have unseen
   // matches" badge the same way opening a notifications tray would.
@@ -315,6 +321,7 @@ async function init() {
   el("runningToggle").onchange = async (e) => {
     await chrome.runtime.sendMessage({ type: "SET_RUNNING", value: e.target.checked });
     refreshCheckNowAvailability(e.target.checked);
+    refreshStatusDot(e.target.checked);
     setTimeout(refreshTabStatus, 1500);
   };
 
@@ -533,12 +540,14 @@ async function init() {
       aiModel: el("aiModel").value,
       aiApiKey: el("aiApiKey").value,
       pollIntervalMinutes: Number(el("pollInterval").value),
+      highlightInGmail: el("highlightToggle").checked,
     });
   };
 
   ["aiEnabled", "categoryDescription", "aiProvider", "aiModel", "aiApiKey"].forEach((id) => {
     el(id).addEventListener("change", persistSettings);
   });
+  el("highlightToggle").addEventListener("change", persistSettings);
 
   // Auto-fill a working default model whenever the provider changes,
   // rather than leaving e.g. "claude-sonnet-4-6" selected under OpenRouter.
