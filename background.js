@@ -24,6 +24,7 @@ import {
   incrementUnseenCount,
   addRuleIfNew,
   recordMatchForStats,
+  markRuleMatched,
 } from "./lib/storage.js";
 
 /**
@@ -183,6 +184,7 @@ async function processScannedRowsInternal(rows) {
         matchedCount++;
         matchedRows.push({ id: email.id, matchedBy: matchReason, priority });
         await recordMatchForStats();
+        if (matchedRule) await markRuleMatched(matchedRule.id); // only rules get credited — AI has no specific rule to stamp
         await appendMatchLog({
           id: email.id,
           from: email.from,

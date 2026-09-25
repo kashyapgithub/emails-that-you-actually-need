@@ -14,6 +14,7 @@ import {
   getRules,
   saveRules,
   addRuleIfNew,
+  toggleRulePriority,
   getMatchLog,
   clearMatchLog,
   resetUnseenCount,
@@ -162,13 +163,22 @@ function applyPreset(preset) {
 // so it's visually obvious they're inactive, instead of letting someone fill
 // in an API key and description that quietly do nothing until they notice
 // the checkbox above them.
-const AI_DEPENDENT_FIELD_IDS = ["categoryDescription", "aiProvider", "aiModel", "aiApiKey"];
+const AI_DEPENDENT_FIELD_IDS = ["categoryDescription", "aiProvider", "aiModel", "aiApiKey", "aiCritical"];
 
 function refreshAiFieldState() {
   const enabled = el("aiEnabled").checked;
   AI_DEPENDENT_FIELD_IDS.forEach((id) => {
     el(id).disabled = !enabled;
   });
+}
+
+// Same pattern as the AI fields above: the time range means nothing while
+// the master checkbox is off, so grey it out rather than leave it looking
+// interactive but inert.
+function refreshQuietHoursFieldState() {
+  const enabled = el("quietHoursEnabled").checked;
+  el("quietHoursStart").disabled = !enabled;
+  el("quietHoursEnd").disabled = !enabled;
 }
 
 function refreshCheckNowAvailability(isRunning) {
@@ -181,6 +191,18 @@ function refreshStatusDot(isRunning) {
   el("statusDot").classList.toggle("live", !!isRunning);
 }
 
+/** "3h ago", "2d ago", "just now" — deliberately coarse, this is a glance-at-it signal, not a precise clock. */
+function formatRelativeTime(timestamp) {
+  const diffMs = Date.now() - timestamp;
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function renderRules(rules) {
   const container = el("ruleList");
   container.innerHTML = "";
@@ -191,7 +213,33 @@ function renderRules(rules) {
   rules.forEach((rule) => {
     const row = document.createElement("div");
     row.className = "rule-item";
-    row.innerHTML = `<span>${escapeHtml(describeRule(rule))}</span>`;
+
+    const label = document.createElement("span");
+    label.textContent = describeRule(rule);
+    if (rule.lastMatchedAt) {
+      const lastMatched = document.createElement("span");
+      lastMatched.className = "rule-last-matched";
+      lastMatched.textContent = ` · last hit ${formatRelativeTime(rule.lastMatchedAt)}`;
+      label.appendChild(lastMatched);
+    }
+    row.appendChild(label);
+
+    const actions = document.createElement("span");
+    actions.className = "rule-item-actions";
+
+    // One click to flip urgency without deleting and retyping the rule —
+    // the gap this closes: priority was previously set-once-at-creation-only.
+    const priorityBtn = document.createElement("button");
+    priorityBtn.className = "secondary rule-priority-toggle";
+    priorityBtn.textContent = rule.priority === "critical" ? "🔴" : "⚪";
+    priorityBtn.title =
+      rule.priority === "critical" ? "Critical — click to make normal priority" : "Normal — click to make critical";
+    priorityBtn.onclick = async () => {
+      const updated = await toggleRulePriority(rule.id);
+      renderRules(updated);
+    };
+    actions.appendChild(priorityBtn);
+
     const removeBtn = document.createElement("button");
     removeBtn.textContent = "Remove";
     removeBtn.className = "secondary";
@@ -200,7 +248,9 @@ function renderRules(rules) {
       await saveRules(updated);
       renderRules(updated);
     };
-    row.appendChild(removeBtn);
+    actions.appendChild(removeBtn);
+
+    row.appendChild(actions);
     container.appendChild(row);
   });
 }
@@ -328,6 +378,7 @@ async function init() {
   refreshTabStatus();
   refreshMatchOptions(); // populate Match dropdown correctly for the default Field on load
   refreshAiFieldState();
+  refreshQuietHoursFieldState();
   refreshCheckNowAvailability(settings.isRunning);
   refreshStatusDot(settings.isRunning);
 
@@ -339,6 +390,7 @@ async function init() {
   el("ruleField").addEventListener("change", refreshMatchOptions);
   el("ruleMatch").addEventListener("change", refreshValuePlaceholder);
   el("aiEnabled").addEventListener("change", refreshAiFieldState);
+  el("quietHoursEnabled").addEventListener("change", refreshQuietHoursFieldState);
 
   el("openGmailBtn").onclick = async () => {
     await chrome.tabs.create({ url: "https://mail.google.com/mail/u/0/#inbox", pinned: true, active: true });

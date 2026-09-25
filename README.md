@@ -145,6 +145,14 @@ rule (and the AI fallback as a whole, via its own checkbox) can be marked
 | Inbox highlight | Red pulse | **Gold pulse** |
 | Quiet hours | Silenced during the window | **Always notifies anyway** |
 
+Changed your mind after creating a rule? Each rule in the list has a small
+⚪/🔴 button — click it to flip a rule's priority in place, no need to
+delete and recreate it just to upgrade its urgency.
+
+Each rule also shows **"last hit ..."** once it's actually caught
+something — a quiet way to notice a rule that's never firing (a typo'd
+domain, say) versus one doing real work.
+
 ## Quiet hours
 
 Turn on **Quiet hours** and set a window (say, 22:00–07:00) to silence
