@@ -338,16 +338,37 @@ none) — it isn't safe from someone who already has access to your machine.
 ```
 gmail-category-watcher/
 ├── manifest.json          # Manifest V3 config — permissions, content script registration
-├── content.js              # Runs on mail.google.com — reads the inbox DOM
-├── background.js           # Service worker — matching, AI fallback, notifications
+├── content.js              # Runs on mail.google.com — reads the inbox DOM, flags matches live
+├── background.js           # Service worker — matching, AI fallback, notifications, quiet hours
 ├── popup.html / .css / .js # The UI you actually click on
 ├── lib/
-│   ├── ruleMatcher.js       # Pure rule-evaluation logic
-│   ├── aiClassifier.js      # Anthropic / OpenAI / Gemini / OpenRouter calls
-│   ├── notifier.js          # chrome.notifications wrapper
+│   ├── ruleMatcher.js       # Pure rule-evaluation logic (no chrome.* — fully unit-testable)
+│   ├── aiClassifier.js      # Anthropic / OpenAI / Gemini / Grok / OpenRouter calls
+│   ├── notifier.js          # chrome.notifications wrapper, incl. the action button
 │   └── storage.js           # Single source of truth for the storage schema
+├── tests/                   # node --test — see Development below
+├── package.json             # Exists ONLY for the test runner; irrelevant to the extension itself
 └── icons/
 ```
+
+## Development
+
+There's a real test suite for the pure logic — the parts with no `chrome.*`
+dependency and the highest correctness stakes (rule matching, message-ID
+deduplication). No `npm install` needed; it runs on Node's built-in test
+runner:
+
+```bash
+npm test
+# or directly:
+node --test
+```
+
+Several of these tests exist specifically because they're regression
+guards for bugs found during earlier manual audits — like the domain-match
+field-coupling bug and the thread-ID/content-hash collision trade-off — not
+just happy-path checks. If you're modifying `lib/ruleMatcher.js` or the
+fingerprint logic in `content.js`, run this first.
 
 ## License
 

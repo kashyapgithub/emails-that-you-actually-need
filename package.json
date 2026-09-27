@@ -1,0 +1,10 @@
+{
+  "name": "gmail-category-watcher",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Not an npm package — this file exists only so Node's built-in test runner treats the .js files as ES modules. The Chrome extension itself never reads this file.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
