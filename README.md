@@ -295,6 +295,19 @@ none) — it isn't safe from someone who already has access to your machine.
 **If you uninstall the extension** (or clear its data from
 `chrome://extensions` → Details → "Clear data"), the key is gone with it.
 
+## First thing to do after loading it: run Diagnostics
+
+The popup has a **Run diagnostics** button. It checks, on your real Gmail
+tab, whether the extension can actually read your inbox, and tells you
+plainly which step fails if not: no tab open, tab not on the inbox, no
+rows found, or rows found but sender/subject unreadable.
+
+This exists because the extension reads Gmail's page markup rather than
+an API, so the one way it can fail silently is Google changing that
+markup. The logic is unit-tested, but the Gmail selectors themselves can
+only be verified against a live Gmail, so check them once after
+installing, and again if it ever seems to stop noticing mail.
+
 ## Good to know
 
 - **Gmail tab requirement** — see [Requirements](#requirements) above.

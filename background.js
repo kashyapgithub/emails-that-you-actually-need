@@ -304,6 +304,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return hash === "" || hash.startsWith("#inbox");
       }).length;
       sendResponse({ tabCount: tabs.length, inboxTabCount });
+    } else if (message.type === "RUN_DIAGNOSTICS") {
+      const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
+      const reports = await Promise.all(
+        tabs.map((tab) =>
+          chrome.tabs.sendMessage(tab.id, { type: "DIAGNOSE" }).catch(() => ({ unreachable: true }))
+        )
+      );
+      sendResponse({ tabCount: tabs.length, reports });
     } else if (message.type === "GET_CURRENT_INBOX_ROWS") {
       // Used by the popup's "Preview matches" button — deliberately read-only:
       // it fetches the currently visible rows WITHOUT marking them as seen or

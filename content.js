@@ -241,9 +241,52 @@ observer.observe(document.body, { childList: true, subtree: true });
 // Lets the popup's "Check now" button force an immediate scan on this tab and
 // get the result back directly, so the popup can show a result that reflects
 // what actually happened rather than guessing with a timer.
+/**
+ * Reports what this content script can actually see on the page right now.
+ * Exists because the extension's biggest silent-failure risk is Gmail
+ * changing the markup the selectors depend on: if `tr.zA` stops matching,
+ * nothing crashes, it just never finds any mail. This lets you find out in
+ * one click instead of wondering why nothing ever notifies.
+ *
+ * Sample text is truncated, and the popup renders it with textContent, so
+ * nothing from an email is ever interpreted as markup.
+ */
+function buildDiagnosticReport() {
+  const rowEls = document.querySelectorAll("tr.zA");
+  let parsedCount = 0;
+  let withThreadId = 0;
+  let sample = null;
+
+  rowEls.forEach((row) => {
+    const parsed = extractRow(row);
+    if (!parsed) return;
+    parsedCount++;
+    if (row.getAttribute("data-legacy-thread-id")) withThreadId++;
+    if (!sample) {
+      sample = {
+        from: parsed.from.slice(0, 60),
+        subject: parsed.subject.slice(0, 60),
+        snippet: parsed.snippet.slice(0, 60),
+      };
+    }
+  });
+
+  return {
+    hash: location.hash || "(none)",
+    onInboxView: isOnInboxView(),
+    isRunning,
+    rowElementsFound: rowEls.length,
+    rowsParsed: parsedCount,
+    rowsWithThreadId: withThreadId,
+    sample,
+  };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "SCAN_NOW") {
     sendResponse({ rows: isOnInboxView() ? collectRows() : [], onInboxView: isOnInboxView() });
+  } else if (message.type === "DIAGNOSE") {
+    sendResponse(buildDiagnosticReport());
   } else if (message.type === "HIGHLIGHT_MATCHES") {
     highlightMatches(message.matches || []);
   }

@@ -608,6 +608,41 @@ async function init() {
     }
   };
 
+  // Plain-language verdict on whether the Gmail selectors are actually
+  // working, so a silent break is a one-click discovery rather than a
+  // mystery. Output goes through textContent only — sample text comes from
+  // real email content and must never be treated as markup.
+  el("diagnoseBtn").onclick = async () => {
+    const out = el("diagnosticsOutput");
+    out.textContent = "Checking…";
+    const { tabCount, reports } = await chrome.runtime.sendMessage({ type: "RUN_DIAGNOSTICS" });
+
+    if (tabCount === 0) {
+      out.textContent = "✗ No Gmail tab is open. Open one and run this again.";
+      return;
+    }
+
+    const lines = [];
+    reports.forEach((r, i) => {
+      const prefix = tabCount > 1 ? `Tab ${i + 1}: ` : "";
+      if (r.unreachable) {
+        lines.push(`${prefix}✗ Can't reach this tab. Reload the Gmail tab (the extension was probably installed or reloaded after it opened).`);
+      } else if (!r.onInboxView) {
+        lines.push(`${prefix}⚠ Not on the inbox (URL hash: ${r.hash}). Scanning is paused on this tab until it's back on the inbox.`);
+      } else if (r.rowElementsFound === 0) {
+        lines.push(`${prefix}✗ Found 0 inbox rows. Either the inbox list isn't showing, or Gmail changed its markup and the row selector (tr.zA) no longer matches.`);
+      } else if (r.rowsParsed === 0) {
+        lines.push(`${prefix}✗ Found ${r.rowElementsFound} rows but could not read sender/subject from any. The inner selectors (span[email], .bog) likely no longer match.`);
+      } else {
+        lines.push(`${prefix}✓ Working: read ${r.rowsParsed} of ${r.rowElementsFound} rows.`);
+        lines.push(`   Thread IDs found on ${r.rowsWithThreadId} of ${r.rowsParsed} rows${r.rowsWithThreadId === 0 ? " (falls back to content-only IDs — still works, slightly less robust against near-identical alerts)" : ""}.`);
+        lines.push(`   Watching: ${r.isRunning ? "on" : "off (flip the toggle to start)"}.`);
+        if (r.sample) lines.push(`   Sample → ${r.sample.from} | ${r.sample.subject}`);
+      }
+    });
+    out.textContent = lines.join("\n");
+  };
+
   el("clearLogBtn").onclick = async () => {
     await clearMatchLog();
     renderMatchLog([]);
